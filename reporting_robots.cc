@@ -16,7 +16,7 @@ namespace googlebot {
 // have some use cases; to the best of our knowledge other tags we find, don't.
 // (for example, "unicorn" from "unicorn: /value")
 static const std::vector<std::string> kUnsupportedTags = {
-    "clean-param", "crawl-delay", "host", "noarchive", "noindex", "nofollow"};
+    "clean-param", "crawl-delay", "host", "noarchive", "noindex", "nofollow", "content-signal"};
 
 void RobotsParsingReporter::Digest(int line_num,
                                    RobotsParsedLine::RobotsTagName parsed_tag) {
