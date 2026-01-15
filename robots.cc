@@ -58,7 +58,7 @@ namespace googlebot {
 //    Match.
 class RobotsMatchStrategy {
  public:
-  virtual ~RobotsMatchStrategy() {}
+  virtual ~RobotsMatchStrategy() = default;
 
   virtual int MatchAllow(absl::string_view path,
                          absl::string_view pattern) = 0;
@@ -124,7 +124,6 @@ static const char* kHexDigits = "0123456789ABCDEF";
 // authority, and fragment. Result always starts with "/".
 // Returns "/" if the url doesn't have a path or is not valid.
 std::string GetPathParamsQuery(const std::string& url) {
-  std::string path;
 
   // Initial two slashes are ignored.
   size_t search_start = 0;
@@ -304,7 +303,7 @@ class RobotsTxtParser {
 
   void ParseAndEmitLine(int current_line, char* line,
                         bool* line_too_long_strict);
-  bool NeedEscapeValueForKey(const Key& key);
+  static bool NeedEscapeValueForKey(const Key& key);
 
   absl::string_view robots_body_;
   RobotsParseHandler* const handler_;
@@ -476,7 +475,7 @@ void RobotsTxtParser::Parse() {
 // characters matched by a pattern is returned as its match priority.
 class LongestMatchRobotsMatchStrategy : public RobotsMatchStrategy {
  public:
-  LongestMatchRobotsMatchStrategy() { }
+  LongestMatchRobotsMatchStrategy() = default;
 
   // Disallow copying and assignment.
   LongestMatchRobotsMatchStrategy(const LongestMatchRobotsMatchStrategy&) =
