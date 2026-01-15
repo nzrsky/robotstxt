@@ -44,8 +44,8 @@ namespace googlebot {
 // ParseRobotsTxt() in the sequence they have been found in the file.
 class RobotsParseHandler {
  public:
-  RobotsParseHandler() {}
-  virtual ~RobotsParseHandler() {}
+  RobotsParseHandler() = default;
+  virtual ~RobotsParseHandler() = default;
 
   // Disallow copying and assignment.
   RobotsParseHandler(const RobotsParseHandler&) = delete;
