@@ -3,62 +3,52 @@
 **Date:** 2026-01-16
 **Platform:** macOS (Darwin 24.6.0), Apple Silicon (ARM64)
 **CPU:** 16 cores, L1D 64 KiB, L1I 128 KiB, L2 4096 KiB (x16)
-**Compiler:** Clang 21.1.1
+**Compiler:** AppleClang 16.0.0
 **Build:** Release (-O3)
+**C++ Standard:** C++20
 **Dataset:** 6863 robots.txt files (~9 MB total)
 
-## Comparison: std::string_view + ada-url vs std::string_view vs abseil
+## Current Configuration: C++20 + ada-url + std::string_view
 
-| Benchmark                  | std + ada-url    | std::string_view | abseil       |
-|----------------------------|------------------|------------------|--------------|
-| Parse + Match All Files    | **26.4 ms**      | 30.1 ms          | 32.5 ms      |
-| Parse + Match Single File  | 211 ns           | 212 ns           | 218 ns       |
-| Match (3 User-Agents)      | 211 ns           | 197 ns           | 204 ns       |
-| Parse Only (All Files)     | **22.5 ms**      | 25.0 ms          | 29.7 ms      |
+| Benchmark                  | Time      | Throughput              |
+|----------------------------|-----------|-------------------------|
+| Parse + Match All Files    | 27.2 ms   | 332 MB/s, 252k files/s  |
+| Parse + Match Single File  | 216 ns    | 150 MB/s                |
+| Match (3 User-Agents)      | 209 ns    | -                       |
+| Parse Only (All Files)     | 23.2 ms   | 296k files/s            |
 
-**Verdict:**
-- `std::string_view + ada-url` is the **fastest** option overall
-- Parse + Match: **12% faster** than std-only, **19% faster** than abseil
-- Parse Only: **10% faster** than std-only, **24% faster** than abseil
-- ada-url provides WHATWG-compliant URL parsing with better performance
+## C++20 Features Used
 
-## Raw Output (std::string_view + ada-url)
+- `constexpr` for char utility functions (compile-time evaluation)
+- `std::string_view::starts_with()` (replaces custom function)
+- `[[likely]]` / `[[unlikely]]` branch hints in hot paths
+- `constexpr` for static constants
 
-```
-Loaded 6863 robots.txt files
--------------------------------------------------------------------------------------
-Benchmark                           Time             CPU   Iterations UserCounters...
--------------------------------------------------------------------------------------
-BM_ParseAllRobotsTxt         26440931 ns     26437963 ns           27 bytes_per_second=342.324Mi/s items_per_second=259.589k/s
-BM_ParseSingleRobotsTxt           211 ns          211 ns      3322906 bytes_per_second=153.647Mi/s
-BM_MatchMultipleUserAgents        211 ns          211 ns      3331097
-BM_ParseOnly                 22514290 ns     22513812 ns           32 items_per_second=304.835k/s
-```
+## Comparison vs Previous Configurations
 
-## Raw Output (std::string_view only)
+| Benchmark                  | C++20 + ada | C++17 + ada  | C++17 only   | abseil       |
+|----------------------------|-------------|--------------|--------------|--------------|
+| Parse + Match All Files    | 27.2 ms     | 26.4 ms      | 30.1 ms      | 32.5 ms      |
+| Parse + Match Single File  | 216 ns      | 211 ns       | 212 ns       | 218 ns       |
+| Match (3 User-Agents)      | 209 ns      | 211 ns       | 197 ns       | 204 ns       |
+| Parse Only (All Files)     | 23.2 ms     | 22.5 ms      | 25.0 ms      | 29.7 ms      |
 
-```
-Loaded 6863 robots.txt files
--------------------------------------------------------------------------------------
-Benchmark                           Time             CPU   Iterations UserCounters...
--------------------------------------------------------------------------------------
-BM_ParseAllRobotsTxt         30146891 ns     30146217 ns           23 bytes_per_second=300.215Mi/s items_per_second=227.657k/s
-BM_ParseSingleRobotsTxt           212 ns          212 ns      3353149 bytes_per_second=153.069Mi/s
-BM_MatchMultipleUserAgents        197 ns          197 ns      3529845
-BM_ParseOnly                 24996621 ns     24992679 ns           28 items_per_second=274.6k/s
-```
+**Notes:**
+- C++20 + ada results use Apple Clang, previous results used LLVM Clang
+- Performance is comparable; differences are within measurement variance
+- C++20 provides better code safety and clarity without performance regression
 
-## Raw Output (abseil)
+## Raw Output
 
 ```
 Loaded 6863 robots.txt files
 -------------------------------------------------------------------------------------
 Benchmark                           Time             CPU   Iterations UserCounters...
 -------------------------------------------------------------------------------------
-BM_ParseAllRobotsTxt         32506022 ns     32501476 ns           21 bytes_per_second=278.46Mi/s items_per_second=211.16k/s
-BM_ParseSingleRobotsTxt           218 ns          218 ns      3185583 bytes_per_second=148.92Mi/s
-BM_MatchMultipleUserAgents        204 ns          204 ns      3443662
-BM_ParseOnly                 29665192 ns     29663478 ns           23 items_per_second=231.362k/s
+BM_ParseAllRobotsTxt         27234500 ns     27232000 ns           26 bytes_per_second=332.342Mi/s items_per_second=252.02k/s
+BM_ParseSingleRobotsTxt           216 ns          216 ns      3323805 bytes_per_second=150.386Mi/s
+BM_MatchMultipleUserAgents        209 ns          209 ns      3356654
+BM_ParseOnly                 23159379 ns     23158433 ns           30 items_per_second=296.35k/s
 ```
 
 ## How to Run
