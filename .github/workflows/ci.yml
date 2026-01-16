@@ -54,3 +54,43 @@ jobs:
 
       - name: Test
         run: ctest --test-dir cmake-build --output-on-failure
+
+  cmake-ubuntu-16:
+    name: CMake (Ubuntu 16.04)
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:16.04
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y software-properties-common wget ca-certificates
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          apt-get update
+          apt-get install -y g++-9 git
+          update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 100
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 100
+
+      - name: Install CMake
+        run: |
+          wget -q https://github.com/Kitware/CMake/releases/download/v3.28.0/cmake-3.28.0-linux-x86_64.tar.gz
+          tar -xzf cmake-3.28.0-linux-x86_64.tar.gz
+          mv cmake-3.28.0-linux-x86_64 /opt/cmake
+          ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
+          ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
+
+      - name: Checkout
+        run: |
+          git clone --depth=1 "https://github.com/$GITHUB_REPOSITORY" .
+          git fetch origin "$GITHUB_SHA" --depth=1
+          git checkout "$GITHUB_SHA"
+
+      - name: Configure
+        run: cmake -B cmake-build -DROBOTS_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build cmake-build -j$(nproc)
+
+      - name: Test
+        run: ctest --test-dir cmake-build --output-on-failure
