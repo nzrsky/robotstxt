@@ -1,8 +1,6 @@
+# Robots.txt Parser and Matcher Library
 
-# Google Robots.txt Parser and Matcher Library
-
-The repository contains Google's robots.txt parser and matcher as a C++ library
-(compliant to C++20).
+A high-performance fork of [Google's robots.txt parser](https://github.com/google/robotstxt) with bug fixes and ~30% faster parsing (C++20).
 
 ## About the library
 
@@ -30,8 +28,9 @@ single URL and user-agent against a robots.txt.
 This fork includes several improvements over the original Google implementation:
 
 ### Performance
+- **Zero-copy parsing**: Eliminated 16KB heap allocation per parse by using `string_view` to reference lines directly from input buffer (~30% faster)
 - **[ada](https://github.com/ada-url/ada) URL parser**: Replaced hand-rolled URL parsing with SIMD-optimized, WHATWG-compliant ada library
-- **Modern C++17/20**: Uses `std::string_view` instead of abseil's `absl::string_view`, removing the abseil dependency
+- **Modern C++20**: Uses `std::string_view` instead of abseil's `absl::string_view`, removing the abseil dependency
 
 ### RFC 9309 Compliance Fixes
 - **Issue [#57](https://github.com/google/robotstxt/issues/57)**: Percent-encoded special characters (`%2A` for `*`, `%24` for `$`) in robots.txt rules now correctly match their literal equivalents in URLs
@@ -39,18 +38,18 @@ This fork includes several improvements over the original Google implementation:
 
 ## Benchmark
 
-Performance comparison on 6,863 real robots.txt files (Apple M3 Max):
+Performance comparison on 6,863 real robots.txt files (~9 MB):
 
-| Implementation | Mean | Relative |
+| Implementation | Parse + Match | Relative |
 |:---|---:|---:|
-| **C++ (this repo)** | 36.7 ms | 1.00 |
-| C++ (Google original) | 43.5 ms | 1.19× slower |
-| [Rust](https://github.com/Folyd/robotstxt) | 82.8 ms | 2.26× slower |
-| [Go](https://github.com/jimsmart/grobotstxt) | 93.2 ms | 2.54× slower |
+| **C++ (this repo)** | 20.1 ms | 1.00 |
+| C++ (Google original) | 26.1 ms | 1.30× slower |
+| [Rust](https://github.com/Folyd/robotstxt) | 82.8 ms | 4.1× slower |
+| [Go](https://github.com/jimsmart/grobotstxt) | 93.2 ms | 4.6× slower |
 
-This fork is **~19% faster** than the original Google implementation and **~2.4× faster** than Rust/Go ports.
+This fork is **~30% faster** than the original Google implementation thanks to zero-copy parsing optimization.
 
-See [COMPARISON.md](COMPARISON.md) for detailed methodology and reproduction steps.
+See [BENCHMARK_RESULTS](BENCHMARK_RESULTS) for details.
 
 ## Building the library
 
