@@ -692,8 +692,9 @@ void RobotsTxtParser::Parse() {
     }
   }
 
-  // Handle final line (if no trailing newline).
-  if (line_start < robots_body_.size()) {
+  // Handle final line (if no trailing newline) or emit empty line if file
+  // ends with newline.
+  if (line_start <= robots_body_.size()) {
     size_t line_len = robots_body_.size() - line_start;
     bool line_too_long = line_len > kMaxLineLen;
     if (line_too_long) {
