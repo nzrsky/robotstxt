@@ -28,11 +28,11 @@
 #ifdef ROBOTS_USE_ADA
 #include <ada.h>
 #endif
-#include <algorithm>
 #include <cassert>
 #include <cctype>
 #include <cstddef>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -393,6 +393,53 @@ bool MaybeEscapePattern(const char* src, char** dst) {
   return true;
 }
 
+// Zero-copy version: returns escaped string only if escaping was needed.
+// If no escaping needed, returns std::nullopt (caller should use original).
+std::optional<std::string> MaybeEscapePattern(std::string_view src) {
+  int num_to_escape = 0;
+  bool need_capitalize = false;
+
+  // First, scan the buffer to see if changes are needed. Most don't.
+  for (size_t i = 0; i < src.size(); i++) {
+    // (a) % escape sequence.
+    if (src[i] == '%' && i + 2 < src.size() &&
+        AsciiIsXDigit(src[i+1]) && AsciiIsXDigit(src[i+2])) {
+      if (AsciiIsLower(src[i+1]) || AsciiIsLower(src[i+2])) {
+        need_capitalize = true;
+      }
+      i += 2;
+    // (b) needs escaping.
+    } else if (src[i] & 0x80) {
+      num_to_escape++;
+    }
+  }
+  // Return if no changes needed.
+  if (!num_to_escape && !need_capitalize) {
+    return std::nullopt;
+  }
+
+  std::string dst;
+  dst.reserve(num_to_escape * 2 + src.size());
+  for (size_t i = 0; i < src.size(); i++) {
+    // (a) Normalize %-escaped sequence (eg. %2f -> %2F).
+    if (src[i] == '%' && i + 2 < src.size() &&
+        AsciiIsXDigit(src[i+1]) && AsciiIsXDigit(src[i+2])) {
+      dst += src[i++];
+      dst += AsciiToUpper(src[i++]);
+      dst += AsciiToUpper(src[i]);
+    // (b) %-escape octets whose highest bit is set.
+    } else if (src[i] & 0x80) {
+      dst += '%';
+      dst += kHexDigits[(static_cast<unsigned char>(src[i]) >> 4) & 0xf];
+      dst += kHexDigits[static_cast<unsigned char>(src[i]) & 0xf];
+    // (c) Normal character, no modification needed.
+    } else {
+      dst += src[i];
+    }
+  }
+  return dst;
+}
+
 // Internal helper classes and functions.
 namespace {
 
@@ -476,14 +523,15 @@ class RobotsTxtParser {
   void Parse();
 
  private:
+  // Parses a line into key and value string_views without copying.
   // Note that `key` and `value` are only set when `metadata->has_directive
   // == true`.
-  static void GetKeyAndValueFrom(char** key, char** value, char* line,
+  static void GetKeyAndValueFrom(std::string_view line,
+                                 std::string_view* key, std::string_view* value,
                                  RobotsParseHandler::LineMetadata* metadata);
-  static void StripWhitespaceSlowly(char ** s);
 
-  void ParseAndEmitLine(int current_line, char* line,
-                        bool* line_too_long_strict);
+  void ParseAndEmitLine(int current_line, std::string_view line,
+                        bool line_too_long);
   static bool NeedEscapeValueForKey(const Key& key);
 
   std::string_view robots_body_;
@@ -500,25 +548,33 @@ bool RobotsTxtParser::NeedEscapeValueForKey(const Key& key) {
   }
 }
 
-// Removes leading and trailing whitespace from null-terminated string s.
-/* static */ void RobotsTxtParser::StripWhitespaceSlowly(char ** s) {
-  std::string_view stripped = StripAsciiWhitespace(*s);
-  *s = const_cast<char*>(stripped.data());
-  (*s)[stripped.size()] = '\0';
+// Finds the first occurrence of any character from `chars` in `s`.
+// Returns npos if not found.
+constexpr size_t FindFirstOf(std::string_view s, std::string_view chars) {
+  for (size_t i = 0; i < s.size(); ++i) {
+    for (char c : chars) {
+      if (s[i] == c) return i;
+    }
+  }
+  return std::string_view::npos;
 }
 
-void RobotsTxtParser::GetKeyAndValueFrom(
-    char** key, char** value, char* line,
+// Zero-copy version: parses line into key/value string_views.
+/* static */ void RobotsTxtParser::GetKeyAndValueFrom(
+    std::string_view line,
+    std::string_view* key, std::string_view* value,
     RobotsParseHandler::LineMetadata* metadata) {
   // Remove comments from the current robots.txt line.
-  char* const comment = strchr(line, '#');
-  if (nullptr != comment) {
+  size_t comment_pos = line.find('#');
+  if (comment_pos != std::string_view::npos) {
     metadata->has_comment = true;
-    *comment = '\0';
+    line = line.substr(0, comment_pos);
   }
-  StripWhitespaceSlowly(&line);
+
+  line = StripAsciiWhitespace(line);
+
   // If the line became empty after removing the comment, return.
-  if (strlen(line) == 0) {
+  if (line.empty()) {
     if (metadata->has_comment) {
       metadata->is_comment = true;
     } else {
@@ -529,50 +585,45 @@ void RobotsTxtParser::GetKeyAndValueFrom(
 
   // Rules must match the following pattern:
   //   <key>[ \t]*:[ \t]*<value>
-  char* sep = strchr(line, ':');
-  if (nullptr == sep) {
+  size_t sep_pos = line.find(':');
+  if (sep_pos == std::string_view::npos) {
     // Google-specific optimization: some people forget the colon, so we need to
     // accept whitespace in its stead.
-    constexpr const char* kWhite = " \t";
-    sep = strpbrk(line, kWhite);
-    if (nullptr != sep) {
-      const char* const val = sep + strspn(sep, kWhite);
-      assert(*val);  // since we dropped trailing whitespace above.
-      if (nullptr != strpbrk(val, kWhite)) {
-        // We only accept whitespace as a separator if there are exactly two
-        // sequences of non-whitespace characters.  If we get here, there were
-        // more than 2 such sequences since we stripped trailing whitespace
-        // above.
+    constexpr std::string_view kWhite = " \t";
+    sep_pos = FindFirstOf(line, kWhite);
+    if (sep_pos != std::string_view::npos) {
+      std::string_view val = line.substr(sep_pos);
+      val = StripAsciiWhitespace(val);
+      // We only accept whitespace as a separator if there are exactly two
+      // sequences of non-whitespace characters.
+      if (FindFirstOf(val, kWhite) != std::string_view::npos) {
+        // More than 2 sequences of non-whitespace.
         return;
       }
       metadata->is_missing_colon_separator = true;
     }
   }
-  if (nullptr == sep) {
-    return;                     // Couldn't find a separator.
+  if (sep_pos == std::string_view::npos) {
+    return;  // Couldn't find a separator.
   }
 
-  *key = line;                        // Key starts at beginning of line.
-  *sep = '\0';                        // And stops at the separator.
-  StripWhitespaceSlowly(key);         // Get rid of any trailing whitespace.
+  *key = StripAsciiWhitespace(line.substr(0, sep_pos));
 
-  if (strlen(*key) > 0) {
-    *value = 1 + sep;                 // Value starts after the separator.
-    StripWhitespaceSlowly(value);     // Get rid of any leading whitespace.
+  if (!key->empty()) {
+    *value = StripAsciiWhitespace(line.substr(sep_pos + 1));
     metadata->has_directive = true;
-    return;
   }
 }
 
-void RobotsTxtParser::ParseAndEmitLine(int current_line, char* line,
-                                       bool* line_too_long_strict) {
-  char* string_key;
-  char* value;
+void RobotsTxtParser::ParseAndEmitLine(int current_line, std::string_view line,
+                                       bool line_too_long) {
+  std::string_view string_key;
+  std::string_view value;
   RobotsParseHandler::LineMetadata line_metadata;
   // Note that `string_key` and `value` are only set when
   // `line_metadata->has_directive == true`.
-  GetKeyAndValueFrom(&string_key, &value, line, &line_metadata);
-  line_metadata.is_line_too_long = *line_too_long_strict;
+  GetKeyAndValueFrom(line, &string_key, &value, &line_metadata);
+  line_metadata.is_line_too_long = line_too_long;
   if (!line_metadata.has_directive) {
     handler_->ReportLineMetadata(current_line, line_metadata);
     return;
@@ -580,10 +631,12 @@ void RobotsTxtParser::ParseAndEmitLine(int current_line, char* line,
   Key key;
   key.Parse(string_key, &line_metadata.is_acceptable_typo);
   if (NeedEscapeValueForKey(key)) {
-    char* escaped_value = nullptr;
-    const bool is_escaped = MaybeEscapePattern(value, &escaped_value);
-    EmitKeyValueToHandler(current_line, key, escaped_value, handler_);
-    if (is_escaped) delete[] escaped_value;
+    auto escaped = MaybeEscapePattern(value);
+    if (escaped) {
+      EmitKeyValueToHandler(current_line, key, *escaped, handler_);
+    } else {
+      EmitKeyValueToHandler(current_line, key, value, handler_);
+    }
   } else {
     EmitKeyValueToHandler(current_line, key, value, handler_);
   }
@@ -600,56 +653,56 @@ void RobotsTxtParser::Parse() {
   // that max url length of 2KB. We want some padding for
   // UTF-8 encoding/nulls/etc. but a much smaller bound would be okay as well.
   // If so, we can ignore the chars on a line past that.
-  constexpr int kBrowserMaxLineLen = 2083;
-  constexpr int kMaxLineLen = kBrowserMaxLineLen * 8;
-  // Allocate a buffer used to process the current line.
-  char* const line_buffer = new char[kMaxLineLen];
-  // last_line_pos is the last writeable pos within the line array
-  // (only a final '\0' may go here).
-  const char* const line_buffer_end = line_buffer + kMaxLineLen - 1;
-  bool line_too_long_strict = false;
-  char* line_pos = line_buffer;
+  constexpr size_t kBrowserMaxLineLen = 2083;
+  // Note: original code used a buffer of kMaxLineLen bytes with the last byte
+  // reserved for null terminator, so max content length is kMaxLineLen - 1.
+  constexpr size_t kMaxLineLen = kBrowserMaxLineLen * 8 - 1;
+
+  // Zero-copy parsing: track line boundaries via indices into robots_body_.
   int line_num = 0;
-  size_t bom_pos = 0;
+  size_t bom_skip = 0;
   bool last_was_carriage_return = false;
   handler_->HandleRobotsStart();
 
-      {
-        for (const unsigned char ch : robots_body_) {
-      ROBOTS_ASSERT(line_pos <= line_buffer_end);
-      // Google-specific optimization: UTF-8 byte order marks should never
-      // appear in a robots.txt file, but they do nevertheless. Skipping
-      // possible BOM-prefix in the first bytes of the input.
-      if (bom_pos < sizeof(utf_bom) && ch == utf_bom[bom_pos++]) {
-        continue;
-      }
-      bom_pos = sizeof(utf_bom);
-      if (ch != 0x0A && ch != 0x0D) {  // Non-line-ending char case.
-        // Put in next spot on current line, as long as there's room.
-        if (line_pos < line_buffer_end) {
-          *(line_pos++) = ch;
-        } else {
-          line_too_long_strict = true;
+  // Skip UTF-8 BOM prefix if present (even partial BOM is skipped).
+  while (bom_skip < sizeof(utf_bom) && bom_skip < robots_body_.size() &&
+         static_cast<unsigned char>(robots_body_[bom_skip]) == utf_bom[bom_skip]) {
+    ++bom_skip;
+  }
+
+  size_t line_start = bom_skip;
+  for (size_t i = bom_skip; i < robots_body_.size(); ++i) {
+    const unsigned char ch = static_cast<unsigned char>(robots_body_[i]);
+    if (ch == 0x0A || ch == 0x0D) {  // Line-ending character.
+      // Only emit an empty line if this was not due to the second character
+      // of the DOS line-ending \r\n.
+      const bool is_CRLF_continuation =
+          (i == line_start) && last_was_carriage_return && ch == 0x0A;
+      if (!is_CRLF_continuation) {
+        size_t line_len = i - line_start;
+        bool line_too_long = line_len > kMaxLineLen;
+        if (line_too_long) {
+          line_len = kMaxLineLen;
         }
-      } else {                         // Line-ending character char case.
-        *line_pos = '\0';
-        // Only emit an empty line if this was not due to the second character
-        // of the DOS line-ending \r\n .
-        const bool is_CRLF_continuation =
-            (line_pos == line_buffer) && last_was_carriage_return && ch == 0x0A;
-        if (!is_CRLF_continuation) {
-          ParseAndEmitLine(++line_num, line_buffer, &line_too_long_strict);
-          line_too_long_strict = false;
-        }
-        line_pos = line_buffer;
-        last_was_carriage_return = (ch == 0x0D);
+        std::string_view line = robots_body_.substr(line_start, line_len);
+        ParseAndEmitLine(++line_num, line, line_too_long);
       }
+      line_start = i + 1;
+      last_was_carriage_return = (ch == 0x0D);
     }
   }
-  *line_pos = '\0';
-  ParseAndEmitLine(++line_num, line_buffer, &line_too_long_strict);
+
+  // Handle final line (if no trailing newline).
+  if (line_start < robots_body_.size()) {
+    size_t line_len = robots_body_.size() - line_start;
+    bool line_too_long = line_len > kMaxLineLen;
+    if (line_too_long) {
+      line_len = kMaxLineLen;
+    }
+    std::string_view line = robots_body_.substr(line_start, line_len);
+    ParseAndEmitLine(++line_num, line, line_too_long);
+  }
   handler_->HandleRobotsEnd();
-  delete [] line_buffer;
 }
 
 // Implements the default robots.txt matching strategy. The maximum number of
