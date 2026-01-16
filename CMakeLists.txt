@@ -1,7 +1,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 PROJECT(robots)
 
-SET(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -57,6 +57,19 @@ OPTION(ROBOTS_INSTALL "If ON, enable the installation of the targets" ON)
 
 INCLUDE(CPack)
 INCLUDE(CheckCCompilerFlag)
+INCLUDE(FetchContent)
+
+############ dependencies ##############
+
+FetchContent_Declare(
+    ada
+    GIT_REPOSITORY https://github.com/ada-url/ada.git
+    GIT_TAG main
+)
+SET(ADA_TESTING OFF CACHE BOOL "" FORCE)
+SET(ADA_TOOLS OFF CACHE BOOL "" FORCE)
+SET(ADA_BENCHMARKS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(ada)
 
 ############ compiler flags ##############
 
@@ -84,10 +97,14 @@ SET(LIBROBOTS_LIBS)
 SET(robots_SRCS ./robots.cc)
 
 ADD_LIBRARY(robots SHARED ${robots_SRCS})
+TARGET_LINK_LIBRARIES(robots ada)
+TARGET_COMPILE_DEFINITIONS(robots PRIVATE ROBOTS_USE_ADA)
 LIST(APPEND LIBROBOTS_LIBS "robots")
 
 IF(ROBOTS_BUILD_STATIC)
     ADD_LIBRARY(robots-static STATIC ${robots_SRCS})
+    TARGET_LINK_LIBRARIES(robots-static ada)
+    TARGET_COMPILE_DEFINITIONS(robots-static PRIVATE ROBOTS_USE_ADA)
 
     LIST(APPEND LIBROBOTS_LIBS "robots-static")
 
@@ -121,7 +138,6 @@ ENDIF(ROBOTS_INSTALL)
 
 IF(ROBOTS_BUILD_TESTS)
     INCLUDE(CTest)
-    INCLUDE(FetchContent)
     ENABLE_TESTING()
 
     FetchContent_Declare(
@@ -134,6 +150,7 @@ IF(ROBOTS_BUILD_TESTS)
 
     ADD_EXECUTABLE(robots-test ./robots_test.cc)
     TARGET_LINK_LIBRARIES(robots-test ${LIBROBOTS_LIBS} gtest_main)
+    TARGET_COMPILE_DEFINITIONS(robots-test PRIVATE ROBOTS_USE_ADA)
     ADD_TEST(NAME robots-test COMMAND robots-test)
 ENDIF(ROBOTS_BUILD_TESTS)
 
@@ -142,8 +159,6 @@ ENDIF(ROBOTS_BUILD_TESTS)
 OPTION(ROBOTS_BUILD_BENCHMARK "If ON, robots will build benchmark target" OFF)
 
 IF(ROBOTS_BUILD_BENCHMARK)
-    INCLUDE(FetchContent)
-
     FetchContent_Declare(
         googlebenchmark
         GIT_REPOSITORY https://github.com/google/benchmark.git

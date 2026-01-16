@@ -25,6 +25,9 @@
 
 #include <stdlib.h>
 
+#ifdef ROBOTS_USE_ADA
+#include <ada.h>
+#endif
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -39,33 +42,33 @@
 
 namespace {
 
-// String utility functions replacing absl equivalents
+// String utility functions - constexpr for compile-time evaluation (C++20)
 
-inline bool AsciiIsAlpha(char c) {
+constexpr bool AsciiIsAlpha(char c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
-inline bool AsciiIsXDigit(char c) {
+constexpr bool AsciiIsXDigit(char c) {
   return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-inline bool AsciiIsLower(char c) {
+constexpr bool AsciiIsLower(char c) {
   return c >= 'a' && c <= 'z';
 }
 
-inline char AsciiToUpper(char c) {
-  return (c >= 'a' && c <= 'z') ? (c - 'a' + 'A') : c;
+constexpr char AsciiToUpper(char c) {
+  return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
 }
 
-inline char AsciiToLower(char c) {
-  return (c >= 'A' && c <= 'Z') ? (c - 'A' + 'a') : c;
+constexpr char AsciiToLower(char c) {
+  return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
 }
 
-inline bool AsciiIsSpace(char c) {
+constexpr bool AsciiIsSpace(char c) {
   return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
-inline std::string_view StripAsciiWhitespace(std::string_view s) {
+constexpr std::string_view StripAsciiWhitespace(std::string_view s) {
   size_t start = 0;
   while (start < s.size() && AsciiIsSpace(s[start])) ++start;
   size_t end = s.size();
@@ -73,11 +76,12 @@ inline std::string_view StripAsciiWhitespace(std::string_view s) {
   return s.substr(start, end - start);
 }
 
-inline bool StartsWith(std::string_view s, std::string_view prefix) {
+// StartsWith helper for C++17 compatibility (C++20 has std::string_view::starts_with())
+constexpr bool StartsWith(std::string_view s, std::string_view prefix) {
   return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
 }
 
-inline bool StartsWithIgnoreCase(std::string_view s, std::string_view prefix) {
+constexpr bool StartsWithIgnoreCase(std::string_view s, std::string_view prefix) {
   if (s.size() < prefix.size()) return false;
   for (size_t i = 0; i < prefix.size(); ++i) {
     if (AsciiToLower(s[i]) != AsciiToLower(prefix[i])) return false;
@@ -85,7 +89,7 @@ inline bool StartsWithIgnoreCase(std::string_view s, std::string_view prefix) {
   return true;
 }
 
-inline bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
+constexpr bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
   if (a.size() != b.size()) return false;
   for (size_t i = 0; i < a.size(); ++i) {
     if (AsciiToLower(a[i]) != AsciiToLower(b[i])) return false;
@@ -96,7 +100,7 @@ inline bool EqualsIgnoreCase(std::string_view a, std::string_view b) {
 }  // namespace
 
 // Allow for typos such as DISALOW in robots.txt.
-static bool kAllowFrequentTypos = true;
+constexpr bool kAllowFrequentTypos = true;
 
 namespace googlebot {
 
@@ -172,7 +176,7 @@ class RobotsMatchStrategy {
   return true;
 }
 
-static const char* kHexDigits = "0123456789ABCDEF";
+constexpr std::string_view kHexDigits = "0123456789ABCDEF";
 
 // GetPathParamsQuery is not in anonymous namespace to allow testing.
 //
@@ -180,36 +184,82 @@ static const char* kHexDigits = "0123456789ABCDEF";
 // authority, and fragment. Result always starts with "/".
 // Returns "/" if the url doesn't have a path or is not valid.
 std::string GetPathParamsQuery(const std::string& url) {
+  if (url.empty()) return "/";
 
-  // Initial two slashes are ignored.
-  size_t search_start = 0;
-  if (url.size() >= 2 && url[0] == '/' && url[1] == '/') search_start = 2;
+#ifdef ROBOTS_USE_ADA
+  // Use ada-url for WHATWG-compliant URL parsing (faster, handles edge cases)
+  // url_aggregator uses string_view slices, not copies
+  auto parsed = ada::parse<ada::url_aggregator>(url);
 
-  size_t early_path = url.find_first_of("/?;", search_start);
-  size_t protocol_end = url.find("://", search_start);
-  if (early_path < protocol_end) {
-    // If path, param or query starts before ://, :// doesn't indicate protocol.
-    protocol_end = std::string::npos;
-  }
-  if (protocol_end == std::string::npos) {
-    protocol_end = search_start;
-  } else {
-    protocol_end += 3;
-  }
-
-  size_t path_start = url.find_first_of("/?;", protocol_end);
-  if (path_start != std::string::npos) {
-    size_t hash_pos = url.find('#', search_start);
-    if (hash_pos < path_start) return "/";
-    size_t path_end = (hash_pos == std::string::npos) ? url.size() : hash_pos;
-    if (url[path_start] != '/') {
-      // Prepend a slash if the result would start e.g. with '?'.
-      return "/" + url.substr(path_start, path_end - path_start);
+  // If that fails, try adding http:// prefix for schemeless URLs
+  if (!parsed) {
+    // Handle protocol-relative URLs (//example.com/path)
+    if (url.size() >= 2 && url[0] == '/' && url[1] == '/') {
+      parsed = ada::parse<ada::url_aggregator>("http:" + url);
+    } else if (url[0] != '/') {
+      // Try adding scheme for URLs like "example.com/path"
+      parsed = ada::parse<ada::url_aggregator>("http://" + url);
     }
-    return url.substr(path_start, path_end - path_start);
   }
 
-  return "/";
+  if (!parsed) {
+    // Last resort: if URL starts with '/', treat it as a path
+    if (url[0] == '/') {
+      size_t hash_pos = url.find('#');
+      return (hash_pos == std::string::npos) ? url : url.substr(0, hash_pos);
+    }
+    return "/";
+  }
+
+  std::string result(parsed->get_pathname());
+  std::string_view search = parsed->get_search();
+  if (!search.empty()) result += search;
+  return result.empty() ? "/" : result;
+
+#else
+  // Fallback: simple URL parsing without ada-url dependency
+  std::string_view s(url);
+
+  // Skip scheme if present (e.g., "http://", "https://")
+  size_t scheme_end = s.find("://");
+  if (scheme_end != std::string_view::npos) {
+    s.remove_prefix(scheme_end + 3);  // Skip "://"
+  } else if (s.size() >= 2 && s[0] == '/' && s[1] == '/') {
+    // Protocol-relative URL (//example.com/path)
+    s.remove_prefix(2);
+  }
+
+  // Find the start of the path (or query string)
+  size_t path_start = 0;
+  if (!s.empty() && s[0] != '/' && s[0] != '?') {
+    // Skip authority (host:port) - path starts at '/' or '?'
+    size_t slash_pos = s.find('/');
+    size_t query_pos = s.find('?');
+    if (slash_pos == std::string_view::npos && query_pos == std::string_view::npos) {
+      return "/";  // No path or query, just authority
+    }
+    // Use whichever comes first (/ or ?)
+    if (slash_pos == std::string_view::npos) {
+      // No path, but has query string - return /?query
+      s = s.substr(query_pos);
+      size_t hash_pos = s.find('#');
+      if (hash_pos != std::string_view::npos) {
+        s = s.substr(0, hash_pos);
+      }
+      return "/" + std::string(s);
+    }
+    path_start = slash_pos;
+  }
+
+  // Extract from path_start to end, but strip fragment
+  s = s.substr(path_start);
+  size_t hash_pos = s.find('#');
+  if (hash_pos != std::string_view::npos) {
+    s = s.substr(0, hash_pos);
+  }
+
+  return s.empty() ? "/" : std::string(s);
+#endif
 }
 
 // MaybeEscapePattern is not in anonymous namespace to allow testing.
@@ -408,7 +458,7 @@ void RobotsTxtParser::GetKeyAndValueFrom(
   if (nullptr == sep) {
     // Google-specific optimization: some people forget the colon, so we need to
     // accept whitespace in its stead.
-    static const char * const kWhite = " \t";
+    constexpr const char* kWhite = " \t";
     sep = strpbrk(line, kWhite);
     if (nullptr != sep) {
       const char* const val = sep + strspn(sep, kWhite);
@@ -468,15 +518,15 @@ void RobotsTxtParser::ParseAndEmitLine(int current_line, char* line,
 
 void RobotsTxtParser::Parse() {
   // UTF-8 byte order marks.
-  static const unsigned char utf_bom[3] = {0xEF, 0xBB, 0xBF};
+  constexpr unsigned char utf_bom[3] = {0xEF, 0xBB, 0xBF};
 
   // Certain browsers limit the URL length to 2083 bytes. In a robots.txt, it's
   // fairly safe to assume any valid line isn't going to be more than many times
   // that max url length of 2KB. We want some padding for
   // UTF-8 encoding/nulls/etc. but a much smaller bound would be okay as well.
   // If so, we can ignore the chars on a line past that.
-  const int kBrowserMaxLineLen = 2083;
-  const int kMaxLineLen = kBrowserMaxLineLen * 8;
+  constexpr int kBrowserMaxLineLen = 2083;
+  constexpr int kMaxLineLen = kBrowserMaxLineLen * 8;
   // Allocate a buffer used to process the current line.
   char* const line_buffer = new char[kMaxLineLen];
   // last_line_pos is the last writeable pos within the line array

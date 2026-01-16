@@ -476,9 +476,16 @@ TEST(RobotsUnittest, ID_Encoding) {
         "Allow: /foo/bar/ツ\n";
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
                                    "http://foo.bar/foo/bar/%E3%83%84"));
-    // The parser encodes the 3-byte character, but the URL is not %-encoded.
+#ifdef ROBOTS_USE_ADA
+    // ada-url normalizes URLs per WHATWG, so raw UTF-8 gets percent-encoded
+    // and matches the (also encoded) robots.txt rule.
+    EXPECT_TRUE(
+        IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
+#else
+    // Without ada-url, raw UTF-8 in URLs is not percent-encoded.
     EXPECT_FALSE(
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
+#endif
   }
   // Percent encoded 3 byte character: /foo/bar/%E3%83%84 -> /foo/bar/%E3%83%84
   {
@@ -488,8 +495,15 @@ TEST(RobotsUnittest, ID_Encoding) {
         "Allow: /foo/bar/%E3%83%84\n";
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
                                    "http://foo.bar/foo/bar/%E3%83%84"));
+#ifdef ROBOTS_USE_ADA
+    // ada-url normalizes URLs per WHATWG, so raw UTF-8 gets percent-encoded.
+    EXPECT_TRUE(
+        IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
+#else
+    // Without ada-url, raw UTF-8 in URLs is not percent-encoded.
     EXPECT_FALSE(
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
+#endif
   }
   // Percent encoded unreserved US-ASCII: /foo/bar/%62%61%7A -> NULL
   // This is illegal according to RFC3986 and while it may work here due to
