@@ -56,6 +56,10 @@ std::string TagNameToString(RobotsParsedLine::RobotsTagName tag_name) {
       return "CrawlDelay";
     case RobotsParsedLine::RobotsTagName::kRequestRate:
       return "RequestRate";
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+    case RobotsParsedLine::RobotsTagName::kContentSignal:
+      return "ContentSignal";
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
     case RobotsParsedLine::RobotsTagName::kUnused:
       return "Unused";
   }

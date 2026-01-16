@@ -463,6 +463,11 @@ class ParsedRobotsKey {
     CRAWL_DELAY,
     REQUEST_RATE,
 
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+    // AI content signal directive (proposed).
+    CONTENT_SIGNAL,
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
+
     // Unrecognized field; kept as-is. High number so that additions to the
     // enumeration above does not change the serialization.
     UNKNOWN = 128
@@ -496,6 +501,9 @@ class ParsedRobotsKey {
   static bool KeyIsSitemap(std::string_view key, bool* is_acceptable_typo);
   static bool KeyIsCrawlDelay(std::string_view key, bool* is_acceptable_typo);
   static bool KeyIsRequestRate(std::string_view key, bool* is_acceptable_typo);
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  static bool KeyIsContentSignal(std::string_view key, bool* is_acceptable_typo);
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 
   KeyType type_;
   std::string_view key_text_;
@@ -551,6 +559,62 @@ void EmitKeyValueToHandler(int line, const ParsedRobotsKey& key,
       handler->HandleRequestRate(line, rate);
       break;
     }
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+    case Key::CONTENT_SIGNAL: {
+      // Parse "key=value, key=value" format
+      // (e.g., "ai-train=no, search=yes, ai-input=yes").
+      ContentSignal signal;
+      if (!value.empty()) {
+        // Parse comma-separated key=value pairs
+        size_t pos = 0;
+        while (pos < value.size()) {
+          // Skip whitespace and commas
+          while (pos < value.size() && (value[pos] == ' ' || value[pos] == '\t' || value[pos] == ',')) {
+            ++pos;
+          }
+          if (pos >= value.size()) break;
+
+          // Find the '=' separator
+          size_t eq_pos = value.find('=', pos);
+          if (eq_pos == std::string_view::npos) break;
+
+          std::string_view key_part = StripAsciiWhitespace(value.substr(pos, eq_pos - pos));
+
+          // Find end of value (next comma or end of string)
+          size_t val_start = eq_pos + 1;
+          size_t val_end = value.find(',', val_start);
+          if (val_end == std::string_view::npos) {
+            val_end = value.size();
+          }
+
+          std::string_view val_part = StripAsciiWhitespace(value.substr(val_start, val_end - val_start));
+
+          // Parse boolean value (yes/no, true/false, 1/0)
+          std::optional<bool> bool_val;
+          if (EqualsIgnoreCase(val_part, "yes") || EqualsIgnoreCase(val_part, "true") || val_part == "1") {
+            bool_val = true;
+          } else if (EqualsIgnoreCase(val_part, "no") || EqualsIgnoreCase(val_part, "false") || val_part == "0") {
+            bool_val = false;
+          }
+
+          // Set the appropriate signal field
+          if (bool_val.has_value()) {
+            if (EqualsIgnoreCase(key_part, "ai-train")) {
+              signal.ai_train = *bool_val;
+            } else if (EqualsIgnoreCase(key_part, "ai-input")) {
+              signal.ai_input = *bool_val;
+            } else if (EqualsIgnoreCase(key_part, "search")) {
+              signal.search = *bool_val;
+            }
+          }
+
+          pos = val_end;
+        }
+      }
+      handler->HandleContentSignal(line, signal);
+      break;
+    }
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
     case Key::UNKNOWN:
       handler->HandleUnknownAction(line, key.GetUnknownText(), value);
       break;
@@ -873,6 +937,10 @@ void RobotsMatcher::HandleRobotsStart() {
   crawl_delay_specific_.reset();
   request_rate_global_.reset();
   request_rate_specific_.reset();
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  content_signal_global_.reset();
+  content_signal_specific_.reset();
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 }
 
 /*static*/ std::string_view RobotsMatcher::ExtractUserAgent(
@@ -1039,6 +1107,31 @@ std::optional<RequestRate> RobotsMatcher::GetRequestRate() const {
   return request_rate_global_;
 }
 
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+void RobotsMatcher::HandleContentSignal(int line_num, const ContentSignal& signal) {
+  if (!seen_any_agent()) return;
+  // Store content-signal for the current user-agent group.
+  // Does NOT set seen_separator_ - content-signal doesn't close the group.
+  if (seen_specific_agent_) {
+    if (!content_signal_specific_.has_value()) {
+      content_signal_specific_ = signal;
+    }
+  } else if (seen_global_agent_) {
+    if (!content_signal_global_.has_value()) {
+      content_signal_global_ = signal;
+    }
+  }
+}
+
+std::optional<ContentSignal> RobotsMatcher::GetContentSignal() const {
+  // Return specific user-agent's content-signal if available, otherwise global.
+  if (ever_seen_specific_agent_ && content_signal_specific_.has_value()) {
+    return content_signal_specific_;
+  }
+  return content_signal_global_;
+}
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
+
 void RobotsMatcher::HandleUnknownAction(int line_num, std::string_view action,
                                         std::string_view value) {}
 
@@ -1056,6 +1149,10 @@ void ParsedRobotsKey::Parse(std::string_view key, bool* is_acceptable_typo) {
     type_ = CRAWL_DELAY;
   } else if (KeyIsRequestRate(key, is_acceptable_typo)) {
     type_ = REQUEST_RATE;
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  } else if (KeyIsContentSignal(key, is_acceptable_typo)) {
+    type_ = CONTENT_SIGNAL;
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
   } else {
     type_ = UNKNOWN;
     key_text_ = key;
@@ -1115,5 +1212,16 @@ bool ParsedRobotsKey::KeyIsRequestRate(std::string_view key,
   *is_acceptable_typo = false;
   return StartsWithIgnoreCase(key, "request-rate");
 }
+
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+bool ParsedRobotsKey::KeyIsContentSignal(std::string_view key,
+                                         bool* is_acceptable_typo) {
+  // Accept "content-signal" and common variants.
+  *is_acceptable_typo =
+      (kAllowFrequentTypos && (StartsWithIgnoreCase(key, "contentsignal") ||
+                               StartsWithIgnoreCase(key, "content signal")));
+  return StartsWithIgnoreCase(key, "content-signal") || *is_acceptable_typo;
+}
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 
 }  // namespace googlebot
