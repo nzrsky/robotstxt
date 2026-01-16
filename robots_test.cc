@@ -520,6 +520,57 @@ TEST(RobotsUnittest, ID_Encoding) {
   }
 }
 
+// Per RFC 9309 section 2.2.3, percent-encoded special characters (%2A for *,
+// %24 for $) in robots.txt rules should match their literal counterparts in
+// URIs. Since * and $ are reserved characters in URIs (RFC 3986), they can
+// appear unencoded in paths.
+// See: https://github.com/google/robotstxt/issues/57
+TEST(RobotsUnittest, ID_EscapedSpecialCharacters) {
+  // %2A in robots.txt should match literal * in URI path
+  {
+    const std::string_view robotstxt =
+        "User-agent: FooBot\n"
+        "Disallow: /path/file-with-%2A.html\n";
+    // Should match: %2A matches literal *
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                    "http://foo.bar/path/file-with-*.html"));
+    // Should also match: %2A matches %2A
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                    "http://foo.bar/path/file-with-%2A.html"));
+    // Should NOT match: %2A is NOT a wildcard
+    EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                   "http://foo.bar/path/file-with-x.html"));
+  }
+  // %24 in robots.txt should match literal $ in URI path
+  {
+    const std::string_view robotstxt =
+        "User-agent: FooBot\n"
+        "Disallow: /path/price%24.html\n";
+    // Should match: %24 matches literal $
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                    "http://foo.bar/path/price$.html"));
+    // Should also match: %24 matches %24
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                    "http://foo.bar/path/price%24.html"));
+    // Should NOT match: %24 is NOT end-of-pattern anchor
+    EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                   "http://foo.bar/path/price"));
+  }
+  // Combined test: both * and $ as literals
+  {
+    const std::string_view robotstxt =
+        "User-agent: FooBot\n"
+        "Disallow: /buy/%2A%24\n";
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                    "http://foo.bar/buy/*$"));
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                    "http://foo.bar/buy/%2A%24"));
+    // Not a wildcard - should not match arbitrary patterns
+    EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
+                                   "http://foo.bar/buy/anything"));
+  }
+}
+
 // The REP RFC defines the following characters that have special meaning in
 // robots.txt:
 // # - inline comment.

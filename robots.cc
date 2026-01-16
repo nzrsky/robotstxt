@@ -178,6 +178,39 @@ class RobotsMatchStrategy {
 
 constexpr std::string_view kHexDigits = "0123456789ABCDEF";
 
+// Percent-encode special robots.txt characters (* and $) in a path.
+// Per RFC 9309 section 2.2.3, these characters have special meaning in
+// robots.txt patterns, so they must be encoded in URLs to match correctly
+// against patterns containing %2A or %24.
+// See: https://github.com/google/robotstxt/issues/57
+static std::string EncodeSpecialPathChars(std::string_view path) {
+  // Quick check: if no special chars, return as-is
+  bool has_special = false;
+  for (char c : path) {
+    if (c == '*' || c == '$') {
+      has_special = true;
+      break;
+    }
+  }
+  if (!has_special) {
+    return std::string(path);
+  }
+
+  // Encode * as %2A and $ as %24
+  std::string result;
+  result.reserve(path.size() + 6);  // Reserve some extra space
+  for (char c : path) {
+    if (c == '*') {
+      result += "%2A";
+    } else if (c == '$') {
+      result += "%24";
+    } else {
+      result += c;
+    }
+  }
+  return result;
+}
+
 // GetPathParamsQuery is not in anonymous namespace to allow testing.
 //
 // Extracts path (with params) and query part from URL. Removes scheme,
@@ -206,7 +239,8 @@ std::string GetPathParamsQuery(const std::string& url) {
     // Last resort: if URL starts with '/', treat it as a path
     if (url[0] == '/') {
       size_t hash_pos = url.find('#');
-      return (hash_pos == std::string::npos) ? url : url.substr(0, hash_pos);
+      std::string path = (hash_pos == std::string::npos) ? url : url.substr(0, hash_pos);
+      return EncodeSpecialPathChars(path);
     }
     return "/";
   }
@@ -214,7 +248,7 @@ std::string GetPathParamsQuery(const std::string& url) {
   std::string result(parsed->get_pathname());
   std::string_view search = parsed->get_search();
   if (!search.empty()) result += search;
-  return result.empty() ? "/" : result;
+  return result.empty() ? "/" : EncodeSpecialPathChars(result);
 
 #else
   // Fallback: simple URL parsing without ada-url dependency
@@ -246,7 +280,7 @@ std::string GetPathParamsQuery(const std::string& url) {
       if (hash_pos != std::string_view::npos) {
         s = s.substr(0, hash_pos);
       }
-      return "/" + std::string(s);
+      return EncodeSpecialPathChars("/" + std::string(s));
     }
     path_start = slash_pos;
   }
@@ -258,7 +292,7 @@ std::string GetPathParamsQuery(const std::string& url) {
     s = s.substr(0, hash_pos);
   }
 
-  return s.empty() ? "/" : std::string(s);
+  return s.empty() ? "/" : EncodeSpecialPathChars(s);
 #endif
 }
 
