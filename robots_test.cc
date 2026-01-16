@@ -17,6 +17,7 @@
 // https://www.rfc-editor.org/rfc/rfc9309.html
 #include "robots.h"
 
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -197,6 +198,97 @@ TEST(RobotsUnittest, ID_LineSyntax_Groups_OtherRules) {
     // Both should be blocked by Disallow: /
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot", url));
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "BarBot", url));
+  }
+}
+
+// Test Crawl-delay parsing and retrieval via GetCrawlDelay().
+TEST(RobotsUnittest, ID_CrawlDelay) {
+  // Test basic crawl-delay parsing.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Crawl-delay: 10\n"
+        "Disallow: /private/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    EXPECT_TRUE(matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/"));
+    auto delay = matcher.GetCrawlDelay();
+    ASSERT_TRUE(delay.has_value());
+    EXPECT_DOUBLE_EQ(10.0, delay.value());
+  }
+  // Test crawl-delay with decimal value.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Crawl-delay: 0.5\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto delay = matcher.GetCrawlDelay();
+    ASSERT_TRUE(delay.has_value());
+    EXPECT_DOUBLE_EQ(0.5, delay.value());
+  }
+  // Test specific user-agent crawl-delay takes precedence.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Crawl-delay: 10\n"
+        "\n"
+        "User-agent: FooBot\n"
+        "Crawl-delay: 5\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"FooBot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto delay = matcher.GetCrawlDelay();
+    ASSERT_TRUE(delay.has_value());
+    EXPECT_DOUBLE_EQ(5.0, delay.value());
+  }
+  // Test no crawl-delay returns nullopt.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Disallow: /private/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto delay = matcher.GetCrawlDelay();
+    EXPECT_FALSE(delay.has_value());
+  }
+  // Test crawl-delay with typo variant "crawldelay".
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "crawldelay: 3\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto delay = matcher.GetCrawlDelay();
+    ASSERT_TRUE(delay.has_value());
+    EXPECT_DOUBLE_EQ(3.0, delay.value());
+  }
+  // Test crawl-delay with invalid value (should be 0).
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Crawl-delay: invalid\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto delay = matcher.GetCrawlDelay();
+    ASSERT_TRUE(delay.has_value());
+    EXPECT_DOUBLE_EQ(0.0, delay.value());
+  }
+  // Test crawl-delay with negative value (should be 0).
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Crawl-delay: -5\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto delay = matcher.GetCrawlDelay();
+    ASSERT_TRUE(delay.has_value());
+    EXPECT_DOUBLE_EQ(0.0, delay.value());
   }
 }
 
@@ -946,6 +1038,11 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
     sitemap_.append(value.data(), value.length());
   }
 
+  void HandleCrawlDelay(int line_num, double value) override {
+    Digest(line_num);
+    crawl_delay_ = value;
+  }
+
   // Any other unrecognized name/v pairs.
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view value) override {
@@ -964,6 +1061,9 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
   // Parsed sitemap line.
   std::string sitemap() const { return sitemap_; }
 
+  // Parsed crawl-delay value.
+  std::optional<double> crawl_delay() const { return crawl_delay_; }
+
  private:
   void Digest(int line_num) {
     ASSERT_GE(line_num, last_line_seen_);
@@ -975,6 +1075,7 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
   int valid_directives_ = 0;
   int unknown_directives_ = 0;
   std::string sitemap_;
+  std::optional<double> crawl_delay_;
 };
 
 // Different kinds of line endings are all supported: %x0D / %x0A / %x0D.0A

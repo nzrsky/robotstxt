@@ -459,6 +459,9 @@ class ParsedRobotsKey {
     ALLOW,
     DISALLOW,
 
+    // Non-standard but widely used directive.
+    CRAWL_DELAY,
+
     // Unrecognized field; kept as-is. High number so that additions to the
     // enumeration above does not change the serialization.
     UNKNOWN = 128
@@ -490,6 +493,7 @@ class ParsedRobotsKey {
   static bool KeyIsAllow(std::string_view key, bool* is_acceptable_typo);
   static bool KeyIsDisallow(std::string_view key, bool* is_acceptable_typo);
   static bool KeyIsSitemap(std::string_view key, bool* is_acceptable_typo);
+  static bool KeyIsCrawlDelay(std::string_view key, bool* is_acceptable_typo);
 
   KeyType type_;
   std::string_view key_text_;
@@ -504,6 +508,22 @@ void EmitKeyValueToHandler(int line, const ParsedRobotsKey& key,
     case Key::ALLOW:          handler->HandleAllow(line, value); break;
     case Key::DISALLOW:       handler->HandleDisallow(line, value); break;
     case Key::SITEMAP:        handler->HandleSitemap(line, value); break;
+    case Key::CRAWL_DELAY: {
+      // Parse value as double (seconds). Invalid values are treated as 0.
+      double delay = 0.0;
+      if (!value.empty()) {
+        // Use strtod for parsing. Create a null-terminated copy.
+        std::string value_str(value);
+        char* endptr = nullptr;
+        delay = strtod(value_str.c_str(), &endptr);
+        // If parsing failed or value is negative, use 0.
+        if (endptr == value_str.c_str() || delay < 0) {
+          delay = 0.0;
+        }
+      }
+      handler->HandleCrawlDelay(line, delay);
+      break;
+    }
     case Key::UNKNOWN:
       handler->HandleUnknownAction(line, key.GetUnknownText(), value);
       break;
@@ -821,6 +841,9 @@ void RobotsMatcher::HandleRobotsStart() {
   seen_specific_agent_ = false;
   ever_seen_specific_agent_ = false;
   seen_separator_ = false;
+
+  crawl_delay_global_.reset();
+  crawl_delay_specific_.reset();
 }
 
 /*static*/ std::string_view RobotsMatcher::ExtractUserAgent(
@@ -940,6 +963,30 @@ int LongestMatchRobotsMatchStrategy::MatchDisallow(std::string_view path,
 
 void RobotsMatcher::HandleSitemap(int line_num, std::string_view value) {}
 
+void RobotsMatcher::HandleCrawlDelay(int line_num, double value) {
+  if (!seen_any_agent()) return;
+  // Store crawl-delay for the current user-agent group.
+  // Does NOT set seen_separator_ - crawl-delay doesn't close the group.
+  if (seen_specific_agent_) {
+    // Only store if not already set (first value wins within a group).
+    if (!crawl_delay_specific_.has_value()) {
+      crawl_delay_specific_ = value;
+    }
+  } else if (seen_global_agent_) {
+    if (!crawl_delay_global_.has_value()) {
+      crawl_delay_global_ = value;
+    }
+  }
+}
+
+std::optional<double> RobotsMatcher::GetCrawlDelay() const {
+  // Return specific user-agent's crawl-delay if available, otherwise global.
+  if (ever_seen_specific_agent_ && crawl_delay_specific_.has_value()) {
+    return crawl_delay_specific_;
+  }
+  return crawl_delay_global_;
+}
+
 void RobotsMatcher::HandleUnknownAction(int line_num, std::string_view action,
                                         std::string_view value) {}
 
@@ -953,6 +1000,8 @@ void ParsedRobotsKey::Parse(std::string_view key, bool* is_acceptable_typo) {
     type_ = DISALLOW;
   } else if (KeyIsSitemap(key, is_acceptable_typo)) {
     type_ = SITEMAP;
+  } else if (KeyIsCrawlDelay(key, is_acceptable_typo)) {
+    type_ = CRAWL_DELAY;
   } else {
     type_ = UNKNOWN;
     key_text_ = key;
@@ -995,6 +1044,15 @@ bool ParsedRobotsKey::KeyIsSitemap(std::string_view key,
   *is_acceptable_typo =
       (kAllowFrequentTypos && (StartsWithIgnoreCase(key, "site-map")));
   return StartsWithIgnoreCase(key, "sitemap") || *is_acceptable_typo;
+}
+
+bool ParsedRobotsKey::KeyIsCrawlDelay(std::string_view key,
+                                      bool* is_acceptable_typo) {
+  // Accept common variants: "crawl-delay", "crawldelay", "crawl delay"
+  *is_acceptable_typo =
+      (kAllowFrequentTypos && (StartsWithIgnoreCase(key, "crawldelay") ||
+                               StartsWithIgnoreCase(key, "crawl delay")));
+  return StartsWithIgnoreCase(key, "crawl-delay") || *is_acceptable_typo;
 }
 
 }  // namespace googlebot

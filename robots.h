@@ -34,6 +34,7 @@
 #ifndef THIRD_PARTY_ROBOTSTXT_ROBOTS_H__
 #define THIRD_PARTY_ROBOTSTXT_ROBOTS_H__
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -58,6 +59,10 @@ class RobotsParseHandler {
   virtual void HandleDisallow(int line_num, std::string_view value) = 0;
 
   virtual void HandleSitemap(int line_num, std::string_view value) = 0;
+
+  // Crawl-delay directive (non-standard but widely used).
+  // Value is in seconds. Note: Google ignores this directive.
+  virtual void HandleCrawlDelay(int line_num, double value) = 0;
 
   // Any other unrecognized name/value pairs.
   virtual void HandleUnknownAction(int line_num, std::string_view action,
@@ -161,6 +166,12 @@ class RobotsMatcher : protected RobotsParseHandler {
   // Returns the line that matched or 0 if none matched.
   int matching_line() const;
 
+  // Returns the crawl-delay value in seconds for the matched user-agent.
+  // Returns std::nullopt if no crawl-delay was specified.
+  // Note: This is a non-standard directive that Google ignores, but other
+  // crawlers may use it.
+  std::optional<double> GetCrawlDelay() const;
+
  protected:
   // Parse callbacks.
   // Protected because used in unittest. Never override RobotsMatcher, implement
@@ -173,6 +184,7 @@ class RobotsMatcher : protected RobotsParseHandler {
   void HandleDisallow(int line_num, std::string_view value) override;
 
   void HandleSitemap(int line_num, std::string_view value) override;
+  void HandleCrawlDelay(int line_num, double value) override;
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view value) override;
 
@@ -262,6 +274,11 @@ class RobotsMatcher : protected RobotsParseHandler {
   const std::vector<std::string>* user_agents_;
 
   RobotsMatchStrategy* match_strategy_;
+
+  // Crawl-delay values for global (*) and specific user-agent groups.
+  // Uses std::optional to distinguish between "not set" and "set to 0".
+  std::optional<double> crawl_delay_global_;
+  std::optional<double> crawl_delay_specific_;
 };
 
 }  // namespace googlebot

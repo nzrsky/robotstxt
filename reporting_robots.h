@@ -22,12 +22,14 @@ struct RobotsParsedLine {
     kAllow = 2,
     kDisallow = 3,
     kSitemap = 4,
+    // Non-standard but widely used directive.
+    kCrawlDelay = 5,
     // Identifier for parseable lines whose key is recognized, but unused.
     // See kUnsupportedTags in reporting_robots.cc for a list of recognized,
     // but unused keys. For example:
     //   noindex: <value>
     //   noarchive: <value>
-    kUnused = 5,
+    kUnused = 6,
   };
 
   int line_num = 0;
@@ -44,6 +46,7 @@ class RobotsParsingReporter : public googlebot::RobotsParseHandler {
   void HandleAllow(int line_num, std::string_view line_value) override;
   void HandleDisallow(int line_num, std::string_view line_value) override;
   void HandleSitemap(int line_num, std::string_view line_value) override;
+  void HandleCrawlDelay(int line_num, double value) override;
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view line_value) override;
   void ReportLineMetadata(int line_num, const LineMetadata& metadata) override;
