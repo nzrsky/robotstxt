@@ -25,6 +25,33 @@ reflect Google's robots.txt parsing and matching.
 For webmasters, we included a small binary in the project that allows testing a
 single URL and user-agent against a robots.txt.
 
+## Changes in this fork
+
+This fork includes several improvements over the original Google implementation:
+
+### Performance
+- **[ada](https://github.com/ada-url/ada) URL parser**: Replaced hand-rolled URL parsing with SIMD-optimized, WHATWG-compliant ada library
+- **Modern C++17/20**: Uses `std::string_view` instead of abseil's `absl::string_view`, removing the abseil dependency
+
+### RFC 9309 Compliance Fixes
+- **Issue [#57](https://github.com/google/robotstxt/issues/57)**: Percent-encoded special characters (`%2A` for `*`, `%24` for `$`) in robots.txt rules now correctly match their literal equivalents in URLs
+- **Issue [#64](https://github.com/google/robotstxt/issues/64)**: Percent-encoded characters in query strings (e.g., `http%3A%2F%2F`) now match their decoded equivalents (`http://`) per RFC 9309 section 2.2.2
+
+## Benchmark
+
+Performance comparison on 6,863 real robots.txt files (Apple M3 Max):
+
+| Implementation | Mean | Relative |
+|:---|---:|---:|
+| **C++ (this repo)** | 36.7 ms | 1.00 |
+| C++ (Google original) | 43.5 ms | 1.19× slower |
+| [Rust](https://github.com/Folyd/robotstxt) | 82.8 ms | 2.26× slower |
+| [Go](https://github.com/jimsmart/grobotstxt) | 93.2 ms | 2.54× slower |
+
+This fork is **~19% faster** than the original Google implementation and **~2.4× faster** than Rust/Go ports.
+
+See [COMPARISON.md](COMPARISON.md) for detailed methodology and reproduction steps.
+
 ## Building the library
 
 ### Quickstart
