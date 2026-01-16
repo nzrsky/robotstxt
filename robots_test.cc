@@ -17,34 +17,60 @@
 // https://www.rfc-editor.org/rfc/rfc9309.html
 #include "robots.h"
 
+#include <sstream>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "gtest/gtest.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
-#include "absl/strings/string_view.h"
 
 namespace {
 
 using ::googlebot::RobotsMatcher;
 
-bool IsUserAgentAllowed(const absl::string_view robotstxt,
+std::vector<std::string> SplitString(const std::string& s, char delim) {
+  std::vector<std::string> result;
+  std::istringstream ss(s);
+  std::string item;
+  while (std::getline(ss, item, delim)) {
+    result.push_back(item);
+  }
+  return result;
+}
+
+// Helper to concatenate strings (replacement for StrCat)
+template<typename... Args>
+std::string StrCat(Args&&... args) {
+  std::ostringstream oss;
+  (oss << ... << std::forward<Args>(args));
+  return oss.str();
+}
+
+// Helper to append to string (replacement for StrAppend)
+template<typename... Args>
+void StrAppend(std::string* dest, Args&&... args) {
+  std::ostringstream oss;
+  (oss << ... << std::forward<Args>(args));
+  dest->append(oss.str());
+}
+
+bool IsUserAgentAllowed(std::string_view robotstxt,
                         const std::string& useragent, const std::string& url) {
   RobotsMatcher matcher;
   return matcher.OneAgentAllowedByRobots(robotstxt, useragent, url);
 }
 
-bool AllowedByRobots(const absl::string_view robotstxt,
+bool AllowedByRobots(std::string_view robotstxt,
                      const std::string& useragents_csv,
                      const std::string& url) {
-  std::vector<std::string> useragents = absl::StrSplit(useragents_csv, ',');
+  std::vector<std::string> useragents = SplitString(useragents_csv, ',');
   RobotsMatcher matcher;
   return matcher.AllowedByRobots(robotstxt, &useragents, url);
 }
 
 // Google-specific: system test.
 TEST(RobotsUnittest, GoogleOnly_SystemTest) {
-  const absl::string_view robotstxt =
+  const std::string_view robotstxt =
       "user-agent: FooBot\n"
       "disallow: /\n";
   // Empty robots.txt: everything allowed.
@@ -72,13 +98,13 @@ TEST(RobotsUnittest, GoogleOnly_SystemTest) {
 // obvious what they mean by "disallow /", so we assume the colon if it's
 // missing.
 TEST(RobotsUnittest, ID_LineSyntax_Line) {
-  const absl::string_view robotstxt_correct =
+  const std::string_view robotstxt_correct =
       "user-agent: FooBot\n"
       "disallow: /\n";
-  const absl::string_view robotstxt_incorrect =
+  const std::string_view robotstxt_incorrect =
       "foo: FooBot\n"
       "bar: /\n";
-  const absl::string_view robotstxt_incorrect_accepted =
+  const std::string_view robotstxt_incorrect_accepted =
       "user-agent FooBot\n"
       "disallow /\n";
   const std::string url = "http://foo.bar/x/y";
@@ -94,7 +120,7 @@ TEST(RobotsUnittest, ID_LineSyntax_Line) {
 // See REP RFC section "Protocol Definition".
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.1
 TEST(RobotsUnittest, ID_LineSyntax_Groups) {
-  const absl::string_view robotstxt =
+  const std::string_view robotstxt =
       "allow: /foo/bar/\n"
       "\n"
       "user-agent: FooBot\n"
@@ -137,7 +163,7 @@ TEST(RobotsUnittest, ID_LineSyntax_Groups) {
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.1
 TEST(RobotsUnittest, ID_LineSyntax_Groups_OtherRules) {
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: BarBot\n"
         "Sitemap: https://foo.bar/sitemap\n"
         "User-agent: *\n"
@@ -147,7 +173,7 @@ TEST(RobotsUnittest, ID_LineSyntax_Groups_OtherRules) {
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "BarBot", url));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Invalid-Unknown-Line: unknown\n"
         "User-agent: *\n"
@@ -163,7 +189,7 @@ TEST(RobotsUnittest, ID_LineSyntax_Groups_OtherRules) {
 // "Only one group is valid for a particular crawler"
 // "The group followed is group 1. Only the most specific group is followed, all others are ignored"
 TEST(RobotsUnittest, ID_Multiple_Useragents) {
-  const absl::string_view robotstxt =
+  const std::string_view robotstxt =
       "user-agent: googlebot-news\n"
       "Disallow: /bar/\n"
       "\n"
@@ -187,15 +213,15 @@ TEST(RobotsUnittest, ID_Multiple_Useragents) {
 // REP lines are case insensitive. See REP RFC section "Protocol Definition".
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.1
 TEST(RobotsUnittest, ID_REPLineNamesCaseInsensitive) {
-  const absl::string_view robotstxt_upper =
+  const std::string_view robotstxt_upper =
       "USER-AGENT: FooBot\n"
       "ALLOW: /x/\n"
       "DISALLOW: /\n";
-  const absl::string_view robotstxt_lower =
+  const std::string_view robotstxt_lower =
       "user-agent: FooBot\n"
       "allow: /x/\n"
       "disallow: /\n";
-  const absl::string_view robotstxt_camel =
+  const std::string_view robotstxt_camel =
       "uSeR-aGeNt: FooBot\n"
       "AlLoW: /x/\n"
       "dIsAlLoW: /\n";
@@ -218,7 +244,7 @@ TEST(RobotsUnittest, ID_VerifyValidUserAgentsToObey) {
   EXPECT_TRUE(RobotsMatcher::IsValidUserAgentToObey("Foobot-Bar"));
   EXPECT_TRUE(RobotsMatcher::IsValidUserAgentToObey("Foo_Bar"));
 
-  EXPECT_FALSE(RobotsMatcher::IsValidUserAgentToObey(absl::string_view()));
+  EXPECT_FALSE(RobotsMatcher::IsValidUserAgentToObey(std::string_view()));
   EXPECT_FALSE(RobotsMatcher::IsValidUserAgentToObey(""));
   EXPECT_FALSE(RobotsMatcher::IsValidUserAgentToObey("ツ"));
 
@@ -233,15 +259,15 @@ TEST(RobotsUnittest, ID_VerifyValidUserAgentsToObey) {
 // user-agent line".
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.2.1
 TEST(RobotsUnittest, ID_UserAgentValueCaseInsensitive) {
-  const absl::string_view robotstxt_upper =
+  const std::string_view robotstxt_upper =
       "User-Agent: FOO BAR\n"
       "Allow: /x/\n"
       "Disallow: /\n";
-  const absl::string_view robotstxt_lower =
+  const std::string_view robotstxt_lower =
       "User-Agent: foo bar\n"
       "Allow: /x/\n"
       "Disallow: /\n";
-  const absl::string_view robotstxt_camel =
+  const std::string_view robotstxt_camel =
       "User-Agent: FoO bAr\n"
       "Allow: /x/\n"
       "Disallow: /\n";
@@ -270,7 +296,7 @@ TEST(RobotsUnittest, ID_UserAgentValueCaseInsensitive) {
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.2.1
 TEST(RobotsUnittest, GoogleOnly_AcceptUserAgentUpToFirstSpace) {
   EXPECT_FALSE(RobotsMatcher::IsValidUserAgentToObey("Foobot Bar"));
-  const absl::string_view robotstxt =
+  const std::string_view robotstxt =
       "User-Agent: *\n"
       "Disallow: /\n"
       "User-Agent: Foo Bar\n"
@@ -288,13 +314,13 @@ TEST(RobotsUnittest, GoogleOnly_AcceptUserAgentUpToFirstSpace) {
 // See REP RFC section "The user-agent line".
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.2.1
 TEST(RobotsUnittest, ID_GlobalGroups_Secondary) {
-  const absl::string_view robotstxt_empty = "";
-  const absl::string_view robotstxt_global =
+  const std::string_view robotstxt_empty = "";
+  const std::string_view robotstxt_global =
       "user-agent: *\n"
       "allow: /\n"
       "user-agent: FooBot\n"
       "disallow: /\n";
-  const absl::string_view robotstxt_only_specific =
+  const std::string_view robotstxt_only_specific =
       "user-agent: FooBot\n"
       "allow: /\n"
       "user-agent: BarBot\n"
@@ -313,10 +339,10 @@ TEST(RobotsUnittest, ID_GlobalGroups_Secondary) {
 // See REP RFC section "The Allow and Disallow lines".
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.2.2
 TEST(RobotsUnittest, ID_AllowDisallow_Value_CaseSensitive) {
-  const absl::string_view robotstxt_lowercase_url =
+  const std::string_view robotstxt_lowercase_url =
       "user-agent: FooBot\n"
       "disallow: /x/\n";
-  const absl::string_view robotstxt_uppercase_url =
+  const std::string_view robotstxt_uppercase_url =
       "user-agent: FooBot\n"
       "disallow: /X/\n";
   const std::string url = "http://foo.bar/x/y";
@@ -333,7 +359,7 @@ TEST(RobotsUnittest, ID_AllowDisallow_Value_CaseSensitive) {
 TEST(RobotsUnittest, ID_LongestMatch) {
   const std::string url = "http://foo.bar/x/page.html";
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "disallow: /x/page.html\n"
         "allow: /x/\n";
@@ -341,7 +367,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot", url));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "allow: /x/page.html\n"
         "disallow: /x/\n";
@@ -350,7 +376,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/x/"));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "disallow: \n"
         "allow: \n";
@@ -359,7 +385,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot", url));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "disallow: /\n"
         "allow: /\n";
@@ -370,7 +396,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
   {
     std::string url_a = "http://foo.bar/x";
     std::string url_b = "http://foo.bar/x/";
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "disallow: /x\n"
         "allow: /x/\n";
@@ -379,7 +405,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
   }
 
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "disallow: /x/page.html\n"
         "allow: /x/page.html\n";
@@ -388,7 +414,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot", url));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "allow: /page\n"
         "disallow: /*.html\n";
@@ -399,7 +425,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/page"));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "user-agent: FooBot\n"
         "allow: /x/page.\n"
         "disallow: /*.html\n";
@@ -409,7 +435,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/x/y.html"));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: *\n"
         "Disallow: /x/\n"
         "User-agent: FooBot\n"
@@ -433,7 +459,7 @@ TEST(RobotsUnittest, ID_LongestMatch) {
 TEST(RobotsUnittest, ID_Encoding) {
   // /foo/bar?baz=http://foo.bar stays unencoded.
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar?qux=taz&baz=http://foo.bar?tar&par\n";
@@ -444,7 +470,7 @@ TEST(RobotsUnittest, ID_Encoding) {
 
   // 3 byte character: /foo/bar/ツ -> /foo/bar/%E3%83%84
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar/ツ\n";
@@ -456,7 +482,7 @@ TEST(RobotsUnittest, ID_Encoding) {
   }
   // Percent encoded 3 byte character: /foo/bar/%E3%83%84 -> /foo/bar/%E3%83%84
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar/%E3%83%84\n";
@@ -469,7 +495,7 @@ TEST(RobotsUnittest, ID_Encoding) {
   // This is illegal according to RFC3986 and while it may work here due to
   // simple string matching, it should not be relied on.
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar/%62%61%7A\n";
@@ -489,7 +515,7 @@ TEST(RobotsUnittest, ID_Encoding) {
 // https://www.rfc-editor.org/rfc/rfc9309.html#section-2.2.3
 TEST(RobotsUnittest, ID_SpecialCharacters) {
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /foo/bar/quz\n"
         "Allow: /foo/*/qux\n";
@@ -503,7 +529,7 @@ TEST(RobotsUnittest, ID_SpecialCharacters) {
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bax/quz"));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /foo/bar$\n"
         "Allow: /foo/bar/qux\n";
@@ -517,7 +543,7 @@ TEST(RobotsUnittest, ID_SpecialCharacters) {
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/baz"));
   }
   {
-    const absl::string_view robotstxt =
+    const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "# Disallow: /\n"
         "Disallow: /foo/quz#qux\n"
@@ -532,7 +558,7 @@ TEST(RobotsUnittest, ID_SpecialCharacters) {
 // Google-specific: "index.html" (and only that) at the end of a pattern is
 // equivalent to "/".
 TEST(RobotsUnittest, GoogleOnly_IndexHTMLisDirectory) {
-  const absl::string_view robotstxt =
+  const std::string_view robotstxt =
       "User-Agent: *\n"
       "Allow: /allowed-slash/index.html\n"
       "Disallow: /\n";
@@ -564,15 +590,15 @@ TEST(RobotsUnittest, GoogleOnly_LineTooLong) {
     size_t max_length =
         kMaxLineLen - longline.length() - disallow.length() + kEOLLen;
     while (longline.size() < max_length) {
-      absl::StrAppend(&longline, "a");
+      StrAppend(&longline, "a");
     }
-    absl::StrAppend(&robotstxt, disallow, longline, "/qux\n");
+    StrAppend(&robotstxt, disallow, longline, "/qux\n");
 
     // Matches nothing, so URL is allowed.
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/fux"));
     // Matches cut off disallow rule.
     EXPECT_FALSE(IsUserAgentAllowed(
-        robotstxt, "FooBot", absl::StrCat("http://foo.bar", longline, "/fux")));
+        robotstxt, "FooBot", StrCat("http://foo.bar", longline, "/fux")));
   }
 
   {
@@ -584,22 +610,22 @@ TEST(RobotsUnittest, GoogleOnly_LineTooLong) {
     size_t max_length =
         kMaxLineLen - longline_a.length() - allow.length() + kEOLLen;
     while (longline_a.size() < max_length) {
-      absl::StrAppend(&longline_a, "a");
-      absl::StrAppend(&longline_b, "b");
+      StrAppend(&longline_a, "a");
+      StrAppend(&longline_b, "b");
     }
-    absl::StrAppend(&robotstxt, allow, longline_a, "/qux\n");
-    absl::StrAppend(&robotstxt, allow, longline_b, "/qux\n");
+    StrAppend(&robotstxt, allow, longline_a, "/qux\n");
+    StrAppend(&robotstxt, allow, longline_b, "/qux\n");
 
     // URL matches the disallow rule.
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/"));
     // Matches the allow rule exactly.
     EXPECT_TRUE(
         IsUserAgentAllowed(robotstxt, "FooBot",
-                           absl::StrCat("http://foo.bar", longline_a, "/qux")));
+                           StrCat("http://foo.bar", longline_a, "/qux")));
     // Matches cut off allow rule.
     EXPECT_TRUE(
         IsUserAgentAllowed(robotstxt, "FooBot",
-                           absl::StrCat("http://foo.bar", longline_b, "/fux")));
+                           StrCat("http://foo.bar", longline_b, "/fux")));
   }
 }
 
@@ -807,24 +833,24 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
   }
   void HandleRobotsEnd() override {}
 
-  void HandleUserAgent(int line_num, absl::string_view value) override {
+  void HandleUserAgent(int line_num, std::string_view value) override {
     Digest(line_num);
   }
-  void HandleAllow(int line_num, absl::string_view value) override {
+  void HandleAllow(int line_num, std::string_view value) override {
     Digest(line_num);
   }
-  void HandleDisallow(int line_num, absl::string_view value) override {
+  void HandleDisallow(int line_num, std::string_view value) override {
     Digest(line_num);
   }
 
-  void HandleSitemap(int line_num, absl::string_view value) override {
+  void HandleSitemap(int line_num, std::string_view value) override {
     Digest(line_num);
     sitemap_.append(value.data(), value.length());
   }
 
   // Any other unrecognized name/v pairs.
-  void HandleUnknownAction(int line_num, absl::string_view action,
-                           absl::string_view value) override {
+  void HandleUnknownAction(int line_num, std::string_view action,
+                           std::string_view value) override {
     last_line_seen_ = line_num;
     unknown_directives_++;
   }
@@ -975,7 +1001,7 @@ TEST(RobotsUnittest, ID_NonStandardLineExample_Sitemap) {
         "User-Agent: bar\n"
         "\n"
         "\n";
-    absl::StrAppend(&robotstxt, "Sitemap: ", sitemap_loc, "\n");
+    StrAppend(&robotstxt, "Sitemap: ", sitemap_loc, "\n");
 
     googlebot::ParseRobotsTxt(robotstxt, &report);
     EXPECT_EQ(sitemap_loc, report.sitemap());
@@ -990,7 +1016,7 @@ TEST(RobotsUnittest, ID_NonStandardLineExample_Sitemap) {
         "User-Agent: bar\n"
         "\n"
         "\n";
-    absl::StrAppend(&robotstxt, "Sitemap: ", sitemap_loc, "\n", robotstxt_temp);
+    StrAppend(&robotstxt, "Sitemap: ", sitemap_loc, "\n", robotstxt_temp);
 
     googlebot::ParseRobotsTxt(robotstxt, &report);
     EXPECT_EQ(sitemap_loc, report.sitemap());

@@ -1,7 +1,8 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 PROJECT(robots)
 
-SET(CMAKE_CXX_STANDARD 23)
+SET(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 SET(VERSION "0.0.0")
@@ -51,68 +52,18 @@ SET(CPACK_SOURCE_IGNORE_FILES
 OPTION(ROBOTS_BUILD_STATIC "If ON, robots will build also the static library" ON)
 OPTION(ROBOTS_BUILD_TESTS "If ON, robots will build test targets" OFF)
 OPTION(ROBOTS_INSTALL "If ON, enable the installation of the targets" ON)
-OPTION(ROBOTS_SKIP_DEPS "If ON, skip build dependency installation" OFF)
 
 ############ helper libs ############
 
 INCLUDE(CPack)
 INCLUDE(CheckCCompilerFlag)
-INCLUDE(ExternalProject)
 
-############ dependencies ##############
+############ compiler flags ##############
 
-IF(NOT ROBOTS_SKIP_DEPS)
-    CONFIGURE_FILE(CMakeLists.txt.in libs/CMakeLists.txt)
-    EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" . RESULT_VARIABLE result WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libs)
-
-    IF(result)
-        MESSAGE(FATAL_ERROR "Failed to download dependencies: ${result}")
-    ENDIF()
-
-    EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} --build . RESULT_VARIABLE result WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libs)
-
-    IF(result)
-        MESSAGE(FATAL_ERROR "Failed to download dependencies: ${result}")
-    ENDIF()
-ENDIF()
-
-# abseil-cpp
 IF(MSVC)
-    # /wd4005  macro-redefinition
-    # /wd4068  unknown pragma
-    # /wd4244  conversion from 'type1' to 'type2'
-    # /wd4267  conversion from 'size_t' to 'type2'
-    # /wd4800  force value to bool 'true' or 'false' (performance warning)
     ADD_COMPILE_OPTIONS(/wd4005 /wd4068 /wd4244 /wd4267 /wd4800)
     ADD_DEFINITIONS(/DNOMINMAX /DWIN32_LEAN_AND_MEAN=1 /D_CRT_SECURE_NO_WARNINGS)
 ENDIF(MSVC)
-
-IF(NOT ROBOTS_SKIP_DEPS)
-    ADD_SUBDIRECTORY(${CMAKE_CURRENT_BINARY_DIR}/libs/abseil-cpp-src
-                     ${CMAKE_CURRENT_BINARY_DIR}/libs/abseil-cpp-build
-                     EXCLUDE_FROM_ALL)
-ENDIF()
-
-IF(ROBOTS_BUILD_TESTS)
-    INCLUDE(CTest)
-
-    IF(NOT ROBOTS_SKIP_DEPS)
-        # googletest
-        ADD_SUBDIRECTORY(${CMAKE_CURRENT_BINARY_DIR}/libs/gtest-src
-                         ${CMAKE_CURRENT_BINARY_DIR}/libs/gtest-build
-                         EXCLUDE_FROM_ALL)
-
-        SET(INSTALL_GTEST 0)
-        SET(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
-        IF(CMAKE_VERSION VERSION_LESS 2.8.11)
-            INCLUDE_DIRECTORIES(${gtest_SOURCE_DIR}/include)
-        ENDIF()
-    ENDIF()
-ENDIF(ROBOTS_BUILD_TESTS)
-
-########### compiler flags ##############
-
 
 SET(COMPILER_FLAGS_TO_CHECK
     "-Wall" "-Werror=implicit-function-declaration"
@@ -128,22 +79,15 @@ INCLUDE_DIRECTORIES(.)
 
 ######### targets ###########
 
-IF(ROBOTS_SKIP_DEPS)
-    find_package(absl)
-ENDIF()
-
 SET(LIBROBOTS_LIBS)
 
 SET(robots_SRCS ./robots.cc)
-SET(robots_LIBS absl::base absl::strings)
 
 ADD_LIBRARY(robots SHARED ${robots_SRCS})
-TARGET_LINK_LIBRARIES(robots ${robots_LIBS})
 LIST(APPEND LIBROBOTS_LIBS "robots")
 
 IF(ROBOTS_BUILD_STATIC)
     ADD_LIBRARY(robots-static STATIC ${robots_SRCS})
-    TARGET_LINK_LIBRARIES(robots-static ${robots_LIBS})
 
     LIST(APPEND LIBROBOTS_LIBS "robots-static")
 
@@ -176,16 +120,19 @@ ENDIF(ROBOTS_INSTALL)
 ############ tests ##############
 
 IF(ROBOTS_BUILD_TESTS)
+    INCLUDE(CTest)
+    INCLUDE(FetchContent)
     ENABLE_TESTING()
 
-    ADD_EXECUTABLE(robots-test ./robots_test.cc)
-    IF(ROBOTS_SKIP_DEPS)
-        find_package(GTest REQUIRED)
-        TARGET_LINK_LIBRARIES(robots-test ${LIBROBOTS_LIBS} ${robots_LIBS} GTest::gtest GTest::gtest_main)
-    ELSE()
-        TARGET_LINK_LIBRARIES(robots-test ${LIBROBOTS_LIBS} gtest_main)
-    ENDIF()
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG main
+    )
+    SET(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
 
+    ADD_EXECUTABLE(robots-test ./robots_test.cc)
+    TARGET_LINK_LIBRARIES(robots-test ${LIBROBOTS_LIBS} gtest_main)
     ADD_TEST(NAME robots-test COMMAND robots-test)
 ENDIF(ROBOTS_BUILD_TESTS)
-
