@@ -136,3 +136,22 @@ IF(ROBOTS_BUILD_TESTS)
     TARGET_LINK_LIBRARIES(robots-test ${LIBROBOTS_LIBS} gtest_main)
     ADD_TEST(NAME robots-test COMMAND robots-test)
 ENDIF(ROBOTS_BUILD_TESTS)
+
+############ benchmark ##############
+
+OPTION(ROBOTS_BUILD_BENCHMARK "If ON, robots will build benchmark target" OFF)
+
+IF(ROBOTS_BUILD_BENCHMARK)
+    INCLUDE(FetchContent)
+
+    FetchContent_Declare(
+        googlebenchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG main
+    )
+    SET(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googlebenchmark)
+
+    ADD_EXECUTABLE(robots-benchmark ./robots_benchmark.cc)
+    TARGET_LINK_LIBRARIES(robots-benchmark ${LIBROBOTS_LIBS} benchmark::benchmark)
+ENDIF(ROBOTS_BUILD_BENCHMARK)
