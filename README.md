@@ -46,6 +46,7 @@ Performance comparison on 6,863 real robots.txt files (~9 MB):
 | C++ (Google original) | 26.1 ms | 1.30× slower |
 | [Rust](https://github.com/Folyd/robotstxt) | 82.8 ms | 4.1× slower |
 | [Go](https://github.com/jimsmart/grobotstxt) | 93.2 ms | 4.6× slower |
+| [Python](https://github.com/Cocon-Se/gpyrobotstxt) | 1.35 s | 67× slower |
 
 This fork is **~30% faster** than the original Google implementation thanks to zero-copy parsing optimization.
 
