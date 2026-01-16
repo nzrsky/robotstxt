@@ -16,21 +16,24 @@
 // File: robots_main.cc
 // -----------------------------------------------------------------------------
 //
-// Simple binary to assess whether a URL is accessible to a user-agent according
-// to records found in a local robots.txt file, based on Google's robots.txt
-// parsing and matching algorithms.
+// Simple binary to assess whether a URL is accessible to a set of user-agents 
+// according to records found in a local robots.txt file, based on Google's 
+// robots.txt parsing and matching algorithms.
 // Usage:
 //     robots_main <local_path_to_robotstxt> <user_agent> <url>
 // Arguments:
 // local_path_to_robotstxt: local path to a file containing robots.txt records.
 //   For example: /home/users/username/robots.txt
-// user_agent: a token to be matched against records in the robots.txt.
-//   For example: Googlebot
+// user_agent: a token to be matched against records in the robots.txt (or a
+// comma-separated list of user agents)
+//   For example: Googlebot or Googlebot,Googlebot-image
 // url: a url to be matched against records in the robots.txt. The URL must be
 // %-encoded according to RFC3986.
 //   For example: https://example.com/accessible/url.html
 // Output: Prints a sentence with verdict about whether 'user_agent' is allowed
-// to access 'url' based on records in 'local_path_to_robotstxt'.
+// to access 'url' based on records in 'local_path_to_robotstxt'. When multiple 
+// user agents are provided, check them as a vector based on functionality in 
+// "AllowedByRobots" method.
 // Return code:
 //   0 when the url is ALLOWED for the user_agent.
 //   1 when the url is DISALLOWED for the user_agent.
@@ -40,6 +43,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "absl/strings/str_split.h"
 #include "robots.h"
 
 bool LoadFile(const std::string& filename, std::string* result) {
@@ -91,13 +95,12 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  std::string user_agent = argv[2];
-  std::vector<std::string> user_agents(1, user_agent);
+  std::vector<std::string> useragents = absl::StrSplit(argv[2], ',');
   googlebot::RobotsMatcher matcher;
   std::string url = argv[3];
-  bool allowed = matcher.AllowedByRobots(robots_content, &user_agents, url);
+  bool allowed = matcher.AllowedByRobots(robots_content, &useragents, url);
 
-  std::cout << "user-agent '" << user_agent << "' with URI '" << argv[3]
+  std::cout << "user-agent '" << argv[2] << "' with URI '" << url
             << "': " << (allowed ? "ALLOWED" : "DISALLOWED") << std::endl;
   if (robots_content.empty()) {
     std::cout << "notice: robots file is empty so all user-agents are allowed"

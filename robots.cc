@@ -499,6 +499,7 @@ RobotsMatcher::RobotsMatcher()
       seen_specific_agent_(false),
       ever_seen_specific_agent_(false),
       seen_separator_(false),
+      best_specific_agent_length_(0),
       path_(nullptr),
       user_agents_(nullptr) {
   match_strategy_ = new LongestMatchRobotsMatchStrategy();
@@ -519,6 +520,7 @@ void RobotsMatcher::InitUserAgentsAndPath(
   path_ = path;
   ABSL_ASSERT('/' == *path_);
   user_agents_ = user_agents;
+  best_specific_agent_length_ = 0;
 }
 
 bool RobotsMatcher::AllowedByRobots(absl::string_view robots_body,
@@ -615,8 +617,26 @@ void RobotsMatcher::HandleUserAgent(int line_num,
   } else {
     user_agent = ExtractUserAgent(user_agent);
     for (const auto& agent : *user_agents_) {
-      if (absl::EqualsIgnoreCase(user_agent, agent)) {
-        ever_seen_specific_agent_ = seen_specific_agent_ = true;
+      if (absl::EqualsIgnoreCase(user_agent, agent)) {        
+        // Implement "most specific user-agent wins" rule per Google's docs:
+        // https://developers.google.com/search/reference/robots_txt#order-of-precedence-for-user-agents
+        
+        // A longer matching user-agent string is more specific.
+        
+        if (user_agent.length() > best_specific_agent_length_) {
+          // Found a more specific match - reset previous specific rules.
+          best_specific_agent_length_ = user_agent.length();
+          allow_.specific.Clear();
+          disallow_.specific.Clear();
+          ever_seen_specific_agent_ = seen_specific_agent_ = true;
+        
+        } else if (user_agent.length() == best_specific_agent_length_) {
+          // Same specificity - allow this group to contribute rules.
+          ever_seen_specific_agent_ = seen_specific_agent_ = true;
+        }
+        
+        // If user_agent.length() < best_specific_agent_length_, we ignore
+        // this less specific group by not setting seen_specific_agent_.
         break;
       }
     }
