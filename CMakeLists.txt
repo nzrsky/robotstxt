@@ -57,6 +57,19 @@ OPTION(ROBOTS_INSTALL "If ON, enable the installation of the targets" ON)
 
 INCLUDE(CPack)
 INCLUDE(CheckCCompilerFlag)
+INCLUDE(FetchContent)
+
+############ dependencies ##############
+
+FetchContent_Declare(
+    ada
+    GIT_REPOSITORY https://github.com/ada-url/ada.git
+    GIT_TAG main
+)
+SET(ADA_TESTING OFF CACHE BOOL "" FORCE)
+SET(ADA_TOOLS OFF CACHE BOOL "" FORCE)
+SET(ADA_BENCHMARKS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(ada)
 
 ############ compiler flags ##############
 
@@ -84,10 +97,12 @@ SET(LIBROBOTS_LIBS)
 SET(robots_SRCS ./robots.cc)
 
 ADD_LIBRARY(robots SHARED ${robots_SRCS})
+TARGET_LINK_LIBRARIES(robots ada)
 LIST(APPEND LIBROBOTS_LIBS "robots")
 
 IF(ROBOTS_BUILD_STATIC)
     ADD_LIBRARY(robots-static STATIC ${robots_SRCS})
+    TARGET_LINK_LIBRARIES(robots-static ada)
 
     LIST(APPEND LIBROBOTS_LIBS "robots-static")
 
@@ -121,7 +136,6 @@ ENDIF(ROBOTS_INSTALL)
 
 IF(ROBOTS_BUILD_TESTS)
     INCLUDE(CTest)
-    INCLUDE(FetchContent)
     ENABLE_TESTING()
 
     FetchContent_Declare(
@@ -142,8 +156,6 @@ ENDIF(ROBOTS_BUILD_TESTS)
 OPTION(ROBOTS_BUILD_BENCHMARK "If ON, robots will build benchmark target" OFF)
 
 IF(ROBOTS_BUILD_BENCHMARK)
-    INCLUDE(FetchContent)
-
     FetchContent_Declare(
         googlebenchmark
         GIT_REPOSITORY https://github.com/google/benchmark.git

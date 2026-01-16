@@ -25,6 +25,7 @@
 
 #include <stdlib.h>
 
+#include <ada.h>
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -180,36 +181,35 @@ static const char* kHexDigits = "0123456789ABCDEF";
 // authority, and fragment. Result always starts with "/".
 // Returns "/" if the url doesn't have a path or is not valid.
 std::string GetPathParamsQuery(const std::string& url) {
+  if (url.empty()) return "/";
 
-  // Initial two slashes are ignored.
-  size_t search_start = 0;
-  if (url.size() >= 2 && url[0] == '/' && url[1] == '/') search_start = 2;
+  // Try parsing as-is first (url_aggregator uses string_view slices, not copies)
+  auto parsed = ada::parse<ada::url_aggregator>(url);
 
-  size_t early_path = url.find_first_of("/?;", search_start);
-  size_t protocol_end = url.find("://", search_start);
-  if (early_path < protocol_end) {
-    // If path, param or query starts before ://, :// doesn't indicate protocol.
-    protocol_end = std::string::npos;
-  }
-  if (protocol_end == std::string::npos) {
-    protocol_end = search_start;
-  } else {
-    protocol_end += 3;
-  }
-
-  size_t path_start = url.find_first_of("/?;", protocol_end);
-  if (path_start != std::string::npos) {
-    size_t hash_pos = url.find('#', search_start);
-    if (hash_pos < path_start) return "/";
-    size_t path_end = (hash_pos == std::string::npos) ? url.size() : hash_pos;
-    if (url[path_start] != '/') {
-      // Prepend a slash if the result would start e.g. with '?'.
-      return "/" + url.substr(path_start, path_end - path_start);
+  // If that fails, try adding http:// prefix for schemeless URLs
+  if (!parsed) {
+    // Handle protocol-relative URLs (//example.com/path)
+    if (url.size() >= 2 && url[0] == '/' && url[1] == '/') {
+      parsed = ada::parse<ada::url_aggregator>("http:" + url);
+    } else if (url[0] != '/') {
+      // Try adding scheme for URLs like "example.com/path"
+      parsed = ada::parse<ada::url_aggregator>("http://" + url);
     }
-    return url.substr(path_start, path_end - path_start);
   }
 
-  return "/";
+  if (!parsed) {
+    // Last resort: if URL starts with '/', treat it as a path
+    if (url[0] == '/') {
+      size_t hash_pos = url.find('#');
+      return (hash_pos == std::string::npos) ? url : url.substr(0, hash_pos);
+    }
+    return "/";
+  }
+
+  std::string result(parsed->get_pathname());
+  std::string_view search = parsed->get_search();
+  if (!search.empty()) result += search;
+  return result.empty() ? "/" : result;
 }
 
 // MaybeEscapePattern is not in anonymous namespace to allow testing.

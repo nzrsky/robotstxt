@@ -7,18 +7,35 @@
 **Build:** Release (-O3)
 **Dataset:** 6863 robots.txt files (~9 MB total)
 
-## Comparison: std::string_view vs abseil
+## Comparison: std::string_view + ada-url vs std::string_view vs abseil
 
-| Benchmark                  | std::string_view | abseil       | Diff     |
-|----------------------------|------------------|--------------|----------|
-| Parse + Match All Files    | 30.1 ms          | 32.5 ms      | **-7%**  |
-| Parse + Match Single File  | 212 ns           | 218 ns       | **-3%**  |
-| Match (3 User-Agents)      | 197 ns           | 204 ns       | **-3%**  |
-| Parse Only (All Files)     | 25.0 ms          | 29.7 ms      | **-16%** |
+| Benchmark                  | std + ada-url    | std::string_view | abseil       |
+|----------------------------|------------------|------------------|--------------|
+| Parse + Match All Files    | **26.4 ms**      | 30.1 ms          | 32.5 ms      |
+| Parse + Match Single File  | 211 ns           | 212 ns           | 218 ns       |
+| Match (3 User-Agents)      | 211 ns           | 197 ns           | 204 ns       |
+| Parse Only (All Files)     | **22.5 ms**      | 25.0 ms          | 29.7 ms      |
 
-**Verdict:** std::string_view (C++17) is **faster** than abseil, while also removing ~100MB dependency.
+**Verdict:**
+- `std::string_view + ada-url` is the **fastest** option overall
+- Parse + Match: **12% faster** than std-only, **19% faster** than abseil
+- Parse Only: **10% faster** than std-only, **24% faster** than abseil
+- ada-url provides WHATWG-compliant URL parsing with better performance
 
-## Raw Output (std::string_view)
+## Raw Output (std::string_view + ada-url)
+
+```
+Loaded 6863 robots.txt files
+-------------------------------------------------------------------------------------
+Benchmark                           Time             CPU   Iterations UserCounters...
+-------------------------------------------------------------------------------------
+BM_ParseAllRobotsTxt         26440931 ns     26437963 ns           27 bytes_per_second=342.324Mi/s items_per_second=259.589k/s
+BM_ParseSingleRobotsTxt           211 ns          211 ns      3322906 bytes_per_second=153.647Mi/s
+BM_MatchMultipleUserAgents        211 ns          211 ns      3331097
+BM_ParseOnly                 22514290 ns     22513812 ns           32 items_per_second=304.835k/s
+```
+
+## Raw Output (std::string_view only)
 
 ```
 Loaded 6863 robots.txt files
