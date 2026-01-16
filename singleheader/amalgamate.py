@@ -19,8 +19,8 @@ OUTPUT_DIR = SCRIPT_DIR
 # Files to process
 ROBOTS_HEADER = os.path.join(ROOT_DIR, "robots.h")
 ROBOTS_SOURCE = os.path.join(ROOT_DIR, "robots.cc")
-ROBOTS_C_HEADER = os.path.join(ROOT_DIR, "robots_c.h")
-ROBOTS_C_SOURCE = os.path.join(ROOT_DIR, "robots_c.cc")
+ROBOTS_C_HEADER = os.path.join(ROOT_DIR, "bindings", "c", "robots_c.h")
+ROBOTS_C_SOURCE = os.path.join(ROOT_DIR, "bindings", "c", "robots_c.cc")
 REPORTING_HEADER = os.path.join(ROOT_DIR, "reporting_robots.h")
 REPORTING_SOURCE = os.path.join(ROOT_DIR, "reporting_robots.cc")
 

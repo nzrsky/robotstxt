@@ -1,7 +1,7 @@
 //
 // *** AMALGAMATED SINGLE-HEADER VERSION ***
-// Generated: 2026-01-16 22:36:39 +0200
-// Commit: 3281b01
+// Generated: 2026-01-16 23:01:33 +0200
+// Commit: 0e413cb
 //
 // This file is auto-generated. Do not edit directly.
 // Run: python3 singleheader/amalgamate.py
@@ -468,8 +468,8 @@ class RobotsParsingReporter : public googlebot::RobotsParseHandler {
 // ============================================================================
 // IMPLEMENTATION
 // ============================================================================
-// Generated: 2026-01-16 22:36:39 +0200
-// Commit: 3281b01
+// Generated: 2026-01-16 23:01:33 +0200
+// Commit: 0e413cb
 //
 // Define ROBOTS_IMPLEMENTATION in exactly one source file before including
 // this header to include the implementation:

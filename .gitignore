@@ -1,1 +1,23 @@
 c-build/*
+build/
+cmake-build*/
+
+# Swift
+bindings/swift/.build/
+bindings/swift/.swiftpm/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+
+# Rust
+bindings/rust/target/
+
+# Java
+bindings/java/target/
+
+# Ruby
+bindings/ruby/*.gem
