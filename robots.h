@@ -40,6 +40,23 @@
 #include <vector>
 
 namespace googlebot {
+
+// Request-rate directive value: requests per time period.
+// Format in robots.txt: "Request-rate: requests/seconds" (e.g., "1/5" = 1 request per 5 seconds)
+struct RequestRate {
+  int requests = 1;    // Number of requests allowed
+  int seconds = 1;     // Time period in seconds
+
+  // Returns requests per second as a double.
+  double RequestsPerSecond() const {
+    return seconds > 0 ? static_cast<double>(requests) / seconds : 0.0;
+  }
+
+  // Returns minimum delay between requests in seconds.
+  double DelaySeconds() const {
+    return requests > 0 ? static_cast<double>(seconds) / requests : 0.0;
+  }
+};
 // Handler for directives found in robots.txt. These callbacks are called by
 // ParseRobotsTxt() in the sequence they have been found in the file.
 class RobotsParseHandler {
@@ -63,6 +80,10 @@ class RobotsParseHandler {
   // Crawl-delay directive (non-standard but widely used).
   // Value is in seconds. Note: Google ignores this directive.
   virtual void HandleCrawlDelay(int line_num, double value) = 0;
+
+  // Request-rate directive (non-standard, used by Bing and others).
+  // Format: "requests/seconds" (e.g., "1/5" = 1 request per 5 seconds).
+  virtual void HandleRequestRate(int line_num, const RequestRate& rate) = 0;
 
   // Any other unrecognized name/value pairs.
   virtual void HandleUnknownAction(int line_num, std::string_view action,
@@ -172,6 +193,11 @@ class RobotsMatcher : protected RobotsParseHandler {
   // crawlers may use it.
   std::optional<double> GetCrawlDelay() const;
 
+  // Returns the request-rate for the matched user-agent.
+  // Returns std::nullopt if no request-rate was specified.
+  // Note: This is a non-standard directive that Google ignores.
+  std::optional<RequestRate> GetRequestRate() const;
+
  protected:
   // Parse callbacks.
   // Protected because used in unittest. Never override RobotsMatcher, implement
@@ -185,6 +211,7 @@ class RobotsMatcher : protected RobotsParseHandler {
 
   void HandleSitemap(int line_num, std::string_view value) override;
   void HandleCrawlDelay(int line_num, double value) override;
+  void HandleRequestRate(int line_num, const RequestRate& rate) override;
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view value) override;
 
@@ -279,6 +306,10 @@ class RobotsMatcher : protected RobotsParseHandler {
   // Uses std::optional to distinguish between "not set" and "set to 0".
   std::optional<double> crawl_delay_global_;
   std::optional<double> crawl_delay_specific_;
+
+  // Request-rate values for global (*) and specific user-agent groups.
+  std::optional<RequestRate> request_rate_global_;
+  std::optional<RequestRate> request_rate_specific_;
 };
 
 }  // namespace googlebot

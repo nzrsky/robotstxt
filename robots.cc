@@ -459,8 +459,9 @@ class ParsedRobotsKey {
     ALLOW,
     DISALLOW,
 
-    // Non-standard but widely used directive.
+    // Non-standard but widely used directives.
     CRAWL_DELAY,
+    REQUEST_RATE,
 
     // Unrecognized field; kept as-is. High number so that additions to the
     // enumeration above does not change the serialization.
@@ -494,6 +495,7 @@ class ParsedRobotsKey {
   static bool KeyIsDisallow(std::string_view key, bool* is_acceptable_typo);
   static bool KeyIsSitemap(std::string_view key, bool* is_acceptable_typo);
   static bool KeyIsCrawlDelay(std::string_view key, bool* is_acceptable_typo);
+  static bool KeyIsRequestRate(std::string_view key, bool* is_acceptable_typo);
 
   KeyType type_;
   std::string_view key_text_;
@@ -522,6 +524,31 @@ void EmitKeyValueToHandler(int line, const ParsedRobotsKey& key,
         }
       }
       handler->HandleCrawlDelay(line, delay);
+      break;
+    }
+    case Key::REQUEST_RATE: {
+      // Parse "requests/seconds" format (e.g., "1/5", "1/5s", "30/60", "1").
+      RequestRate rate;
+      if (!value.empty()) {
+        std::string value_str(value);
+        char* endptr = nullptr;
+        long requests = strtol(value_str.c_str(), &endptr, 10);
+        if (endptr != value_str.c_str() && requests > 0) {
+          rate.requests = static_cast<int>(requests);
+          // Check for "/" separator
+          if (*endptr == '/') {
+            ++endptr;
+            char* seconds_end = nullptr;
+            long seconds = strtol(endptr, &seconds_end, 10);
+            if (seconds_end != endptr && seconds > 0) {
+              rate.seconds = static_cast<int>(seconds);
+            }
+            // Ignore optional 's' suffix (e.g., "1/5s")
+          }
+          // If no "/" found, treat as "requests/1" (requests per second)
+        }
+      }
+      handler->HandleRequestRate(line, rate);
       break;
     }
     case Key::UNKNOWN:
@@ -844,6 +871,8 @@ void RobotsMatcher::HandleRobotsStart() {
 
   crawl_delay_global_.reset();
   crawl_delay_specific_.reset();
+  request_rate_global_.reset();
+  request_rate_specific_.reset();
 }
 
 /*static*/ std::string_view RobotsMatcher::ExtractUserAgent(
@@ -987,6 +1016,29 @@ std::optional<double> RobotsMatcher::GetCrawlDelay() const {
   return crawl_delay_global_;
 }
 
+void RobotsMatcher::HandleRequestRate(int line_num, const RequestRate& rate) {
+  if (!seen_any_agent()) return;
+  // Store request-rate for the current user-agent group.
+  // Does NOT set seen_separator_ - request-rate doesn't close the group.
+  if (seen_specific_agent_) {
+    if (!request_rate_specific_.has_value()) {
+      request_rate_specific_ = rate;
+    }
+  } else if (seen_global_agent_) {
+    if (!request_rate_global_.has_value()) {
+      request_rate_global_ = rate;
+    }
+  }
+}
+
+std::optional<RequestRate> RobotsMatcher::GetRequestRate() const {
+  // Return specific user-agent's request-rate if available, otherwise global.
+  if (ever_seen_specific_agent_ && request_rate_specific_.has_value()) {
+    return request_rate_specific_;
+  }
+  return request_rate_global_;
+}
+
 void RobotsMatcher::HandleUnknownAction(int line_num, std::string_view action,
                                         std::string_view value) {}
 
@@ -1002,6 +1054,8 @@ void ParsedRobotsKey::Parse(std::string_view key, bool* is_acceptable_typo) {
     type_ = SITEMAP;
   } else if (KeyIsCrawlDelay(key, is_acceptable_typo)) {
     type_ = CRAWL_DELAY;
+  } else if (KeyIsRequestRate(key, is_acceptable_typo)) {
+    type_ = REQUEST_RATE;
   } else {
     type_ = UNKNOWN;
     key_text_ = key;
@@ -1053,6 +1107,13 @@ bool ParsedRobotsKey::KeyIsCrawlDelay(std::string_view key,
       (kAllowFrequentTypos && (StartsWithIgnoreCase(key, "crawldelay") ||
                                StartsWithIgnoreCase(key, "crawl delay")));
   return StartsWithIgnoreCase(key, "crawl-delay") || *is_acceptable_typo;
+}
+
+bool ParsedRobotsKey::KeyIsRequestRate(std::string_view key,
+                                       bool* is_acceptable_typo) {
+  // Only accept "request-rate" (no typo variants, unlike crawl-delay).
+  *is_acceptable_typo = false;
+  return StartsWithIgnoreCase(key, "request-rate");
 }
 
 }  // namespace googlebot

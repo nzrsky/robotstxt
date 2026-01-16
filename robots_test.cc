@@ -292,6 +292,94 @@ TEST(RobotsUnittest, ID_CrawlDelay) {
   }
 }
 
+TEST(RobotsUnittest, ID_RequestRate) {
+  // Test basic request-rate parsing (requests/seconds format).
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Request-rate: 1/5\n"
+        "Disallow: /private/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    EXPECT_TRUE(
+        matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/"));
+    auto rate = matcher.GetRequestRate();
+    ASSERT_TRUE(rate.has_value());
+    EXPECT_EQ(1, rate.value().requests);
+    EXPECT_EQ(5, rate.value().seconds);
+    EXPECT_DOUBLE_EQ(0.2, rate.value().RequestsPerSecond());
+    EXPECT_DOUBLE_EQ(5.0, rate.value().DelaySeconds());
+  }
+  // Test request-rate with larger values.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Request-rate: 30/60\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto rate = matcher.GetRequestRate();
+    ASSERT_TRUE(rate.has_value());
+    EXPECT_EQ(30, rate.value().requests);
+    EXPECT_EQ(60, rate.value().seconds);
+    EXPECT_DOUBLE_EQ(0.5, rate.value().RequestsPerSecond());
+    EXPECT_DOUBLE_EQ(2.0, rate.value().DelaySeconds());
+  }
+  // Test request-rate with 's' suffix (1/5s format).
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Request-rate: 1/10s\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto rate = matcher.GetRequestRate();
+    ASSERT_TRUE(rate.has_value());
+    EXPECT_EQ(1, rate.value().requests);
+    EXPECT_EQ(10, rate.value().seconds);
+  }
+  // Test specific user-agent request-rate takes precedence.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Request-rate: 1/10\n"
+        "\n"
+        "User-agent: FooBot\n"
+        "Request-rate: 1/5\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"FooBot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto rate = matcher.GetRequestRate();
+    ASSERT_TRUE(rate.has_value());
+    EXPECT_EQ(1, rate.value().requests);
+    EXPECT_EQ(5, rate.value().seconds);
+  }
+  // Test no request-rate returns nullopt.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Disallow: /private/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto rate = matcher.GetRequestRate();
+    EXPECT_FALSE(rate.has_value());
+  }
+  // Test request-rate with single number (no slash = requests per second).
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Request-rate: 2\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto rate = matcher.GetRequestRate();
+    ASSERT_TRUE(rate.has_value());
+    EXPECT_EQ(2, rate.value().requests);
+    EXPECT_EQ(1, rate.value().seconds);
+  }
+}
+
 // Test based on the documentation at
 // https://developers.google.com/search/reference/robots_txt#order-of-precedence-for-user-agents
 // "Only one group is valid for a particular crawler"
@@ -1043,6 +1131,12 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
     crawl_delay_ = value;
   }
 
+  void HandleRequestRate(int line_num,
+                         const googlebot::RequestRate& rate) override {
+    Digest(line_num);
+    request_rate_ = rate;
+  }
+
   // Any other unrecognized name/v pairs.
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view value) override {
@@ -1064,6 +1158,11 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
   // Parsed crawl-delay value.
   std::optional<double> crawl_delay() const { return crawl_delay_; }
 
+  // Parsed request-rate value.
+  std::optional<googlebot::RequestRate> request_rate() const {
+    return request_rate_;
+  }
+
  private:
   void Digest(int line_num) {
     ASSERT_GE(line_num, last_line_seen_);
@@ -1076,6 +1175,7 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
   int unknown_directives_ = 0;
   std::string sitemap_;
   std::optional<double> crawl_delay_;
+  std::optional<googlebot::RequestRate> request_rate_;
 };
 
 // Different kinds of line endings are all supported: %x0D / %x0A / %x0D.0A
