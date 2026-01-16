@@ -52,9 +52,12 @@ std::string TagNameToString(RobotsParsedLine::RobotsTagName tag_name) {
       return "Disallow";
     case RobotsParsedLine::RobotsTagName::kSitemap:
       return "Sitemap";
+    case RobotsParsedLine::RobotsTagName::kCrawlDelay:
+      return "CrawlDelay";
     case RobotsParsedLine::RobotsTagName::kUnused:
       return "Unused";
   }
+  return "Unknown";  // Fallback for any future additions.
 }
 
 // Allows debugging the contents of the RobotsParsedLine struct.
