@@ -25,7 +25,9 @@
 
 #include <stdlib.h>
 
+#ifdef ROBOTS_USE_ADA
 #include <ada.h>
+#endif
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -74,7 +76,10 @@ constexpr std::string_view StripAsciiWhitespace(std::string_view s) {
   return s.substr(start, end - start);
 }
 
-// C++20: Use std::string_view::starts_with() instead of custom StartsWith
+// StartsWith helper for C++17 compatibility (C++20 has std::string_view::starts_with())
+constexpr bool StartsWith(std::string_view s, std::string_view prefix) {
+  return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
+}
 
 constexpr bool StartsWithIgnoreCase(std::string_view s, std::string_view prefix) {
   if (s.size() < prefix.size()) return false;
@@ -181,7 +186,9 @@ constexpr std::string_view kHexDigits = "0123456789ABCDEF";
 std::string GetPathParamsQuery(const std::string& url) {
   if (url.empty()) return "/";
 
-  // Try parsing as-is first (url_aggregator uses string_view slices, not copies)
+#ifdef ROBOTS_USE_ADA
+  // Use ada-url for WHATWG-compliant URL parsing (faster, handles edge cases)
+  // url_aggregator uses string_view slices, not copies
   auto parsed = ada::parse<ada::url_aggregator>(url);
 
   // If that fails, try adding http:// prefix for schemeless URLs
@@ -208,6 +215,51 @@ std::string GetPathParamsQuery(const std::string& url) {
   std::string_view search = parsed->get_search();
   if (!search.empty()) result += search;
   return result.empty() ? "/" : result;
+
+#else
+  // Fallback: simple URL parsing without ada-url dependency
+  std::string_view s(url);
+
+  // Skip scheme if present (e.g., "http://", "https://")
+  size_t scheme_end = s.find("://");
+  if (scheme_end != std::string_view::npos) {
+    s.remove_prefix(scheme_end + 3);  // Skip "://"
+  } else if (s.size() >= 2 && s[0] == '/' && s[1] == '/') {
+    // Protocol-relative URL (//example.com/path)
+    s.remove_prefix(2);
+  }
+
+  // Find the start of the path (or query string)
+  size_t path_start = 0;
+  if (!s.empty() && s[0] != '/' && s[0] != '?') {
+    // Skip authority (host:port) - path starts at '/' or '?'
+    size_t slash_pos = s.find('/');
+    size_t query_pos = s.find('?');
+    if (slash_pos == std::string_view::npos && query_pos == std::string_view::npos) {
+      return "/";  // No path or query, just authority
+    }
+    // Use whichever comes first (/ or ?)
+    if (slash_pos == std::string_view::npos) {
+      // No path, but has query string - return /?query
+      s = s.substr(query_pos);
+      size_t hash_pos = s.find('#');
+      if (hash_pos != std::string_view::npos) {
+        s = s.substr(0, hash_pos);
+      }
+      return "/" + std::string(s);
+    }
+    path_start = slash_pos;
+  }
+
+  // Extract from path_start to end, but strip fragment
+  s = s.substr(path_start);
+  size_t hash_pos = s.find('#');
+  if (hash_pos != std::string_view::npos) {
+    s = s.substr(0, hash_pos);
+  }
+
+  return s.empty() ? "/" : std::string(s);
+#endif
 }
 
 // MaybeEscapePattern is not in anonymous namespace to allow testing.
@@ -718,7 +770,7 @@ void RobotsMatcher::HandleAllow(int line_num, std::string_view value) {
     const size_t slash_pos = value.find_last_of('/');
 
     if (slash_pos != std::string_view::npos &&
-        value.substr(slash_pos).starts_with("/index.htm")) {
+        StartsWith(value.substr(slash_pos), "/index.htm")) {
       const int len = slash_pos + 1;
       std::vector<char> newpattern(len + 1);
       strncpy(newpattern.data(), value.data(), len);
