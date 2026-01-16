@@ -1,30 +1,19 @@
 # How to Contribute
 
-We'd love to accept your patches and contributions to this project. There are
-just a few small guidelines you need to follow.
+Contributions are welcome! This is a fork of [Google's robotstxt](https://github.com/google/robotstxt) with performance improvements and additional features.
 
-## Contributor License Agreement
+## Pull Requests
 
-Contributions to this project must be accompanied by a Contributor License
-Agreement. You (or your employer) retain the copyright to your contribution;
-this simply gives us permission to use and redistribute your contributions as
-part of the project. Head over to <https://cla.developers.google.com/> to see
-your current agreements on file or to sign a new one.
+1. Fork the repo and create your branch from `master`
+2. Make sure tests pass: `cmake --build build && ./build/robots-test`
+3. Open a pull request
 
-You generally only need to submit a CLA once, so if you've already submitted one
-(even if it was for a different project), you probably don't need to do it
-again.
+## Code Style
 
-## Code reviews
+- Follow existing code style
+- Add tests for new functionality
+- Keep commits focused and atomic
 
-All submissions, including submissions by project members, require review. We
-use GitHub pull requests for this purpose. Keep in mind that this library is
-used in Google's production systems, so we need to be very strict about what
-changes we accept. Consult
-[GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
-information on using pull requests.
+## License
 
-## Community Guidelines
-
-This project follows [Google's Open Source Community
-Guidelines](https://opensource.google.com/conduct/).
+By contributing, you agree that your contributions will be licensed under the Apache 2.0 License.
