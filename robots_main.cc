@@ -42,9 +42,23 @@
 //
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
-#include "absl/strings/str_split.h"
 #include "robots.h"
+
+namespace {
+std::vector<std::string> SplitString(const std::string& s, char delim) {
+  std::vector<std::string> result;
+  std::istringstream ss(s);
+  std::string item;
+  while (std::getline(ss, item, delim)) {
+    result.push_back(item);
+  }
+  return result;
+}
+}  // namespace
 
 bool LoadFile(const std::string& filename, std::string* result) {
   std::ifstream file(filename, std::ios::in | std::ios::binary | std::ios::ate);
@@ -95,7 +109,7 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  std::vector<std::string> useragents = absl::StrSplit(argv[2], ',');
+  std::vector<std::string> useragents = SplitString(argv[2], ',');
   googlebot::RobotsMatcher matcher;
   std::string url = argv[3];
   bool allowed = matcher.AllowedByRobots(robots_content, &useragents, url);
