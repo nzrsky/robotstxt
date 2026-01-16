@@ -457,35 +457,53 @@ TEST(RobotsUnittest, ID_LongestMatch) {
 // NOTE: It's up to the caller to percent encode a URL before passing it to the
 // parser. Percent encoding URIs in the rules is unnecessary.
 TEST(RobotsUnittest, ID_Encoding) {
-  // /foo/bar?baz=http://foo.bar stays unencoded.
+  // Per RFC 9309 section 2.2.2, reserved characters in query string values
+  // should be percent-encoded. Both encoded and unencoded URLs should match.
+  // See: https://github.com/google/robotstxt/issues/64
   {
     const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar?qux=taz&baz=http://foo.bar?tar&par\n";
+    // Unencoded URL matches unencoded rule (both get normalized)
+    EXPECT_TRUE(IsUserAgentAllowed(
+        robotstxt, "FooBot",
+        "http://foo.bar/foo/bar?qux=taz&baz=http://foo.bar?tar&par"));
+    // RFC-compliant encoded URL should also match
+    EXPECT_TRUE(IsUserAgentAllowed(
+        robotstxt, "FooBot",
+        "http://foo.bar/foo/bar?qux=taz&baz=http%3A%2F%2Ffoo.bar%3Ftar%26par"));
+  }
+  // Test with already-encoded rule
+  {
+    const std::string_view robotstxt =
+        "User-agent: FooBot\n"
+        "Disallow: /\n"
+        "Allow: /foo/bar?qux=taz&baz=http%3A%2F%2Ffoo.bar%3Ftar%26par\n";
+    // Encoded URL matches encoded rule
+    EXPECT_TRUE(IsUserAgentAllowed(
+        robotstxt, "FooBot",
+        "http://foo.bar/foo/bar?qux=taz&baz=http%3A%2F%2Ffoo.bar%3Ftar%26par"));
+    // Unencoded URL should also match (gets normalized to encoded form)
     EXPECT_TRUE(IsUserAgentAllowed(
         robotstxt, "FooBot",
         "http://foo.bar/foo/bar?qux=taz&baz=http://foo.bar?tar&par"));
   }
 
   // 3 byte character: /foo/bar/ツ -> /foo/bar/%E3%83%84
+  // Per RFC 9309 section 2.2.2, percent-encoded octets are decoded for comparison,
+  // so both encoded and raw UTF-8 URLs should match.
   {
     const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar/ツ\n";
+    // Encoded URL matches (rule's ツ is encoded to %E3%83%84, then decoded for comparison)
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
                                    "http://foo.bar/foo/bar/%E3%83%84"));
-#ifdef ROBOTS_USE_ADA
-    // ada-url normalizes URLs per WHATWG, so raw UTF-8 gets percent-encoded
-    // and matches the (also encoded) robots.txt rule.
+    // Raw UTF-8 URL also matches (both are decoded/compared as raw bytes)
     EXPECT_TRUE(
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
-#else
-    // Without ada-url, raw UTF-8 in URLs is not percent-encoded.
-    EXPECT_FALSE(
-        IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
-#endif
   }
   // Percent encoded 3 byte character: /foo/bar/%E3%83%84 -> /foo/bar/%E3%83%84
   {
@@ -493,27 +511,26 @@ TEST(RobotsUnittest, ID_Encoding) {
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar/%E3%83%84\n";
+    // Encoded URL matches encoded rule
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
                                    "http://foo.bar/foo/bar/%E3%83%84"));
-#ifdef ROBOTS_USE_ADA
-    // ada-url normalizes URLs per WHATWG, so raw UTF-8 gets percent-encoded.
+    // Raw UTF-8 URL also matches (decoded for comparison per RFC 9309)
     EXPECT_TRUE(
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
-#else
-    // Without ada-url, raw UTF-8 in URLs is not percent-encoded.
-    EXPECT_FALSE(
-        IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/ツ"));
-#endif
   }
-  // Percent encoded unreserved US-ASCII: /foo/bar/%62%61%7A -> NULL
-  // This is illegal according to RFC3986 and while it may work here due to
-  // simple string matching, it should not be relied on.
+  // Percent encoded unreserved US-ASCII: /foo/bar/%62%61%7A matches /foo/bar/baz
+  // Per RFC 9309 section 2.2.2: "If a percent-encoded ASCII octet is encountered
+  // in the URI, it MUST be unencoded prior to comparison, unless it is a reserved
+  // character in the URI as defined by RFC3986..."
+  // Note: While encoding unreserved chars is discouraged by RFC 3986, RFC 9309
+  // requires decoding them for comparison.
   {
     const std::string_view robotstxt =
         "User-agent: FooBot\n"
         "Disallow: /\n"
         "Allow: /foo/bar/%62%61%7A\n";
-    EXPECT_FALSE(
+    // Per RFC 9309, %62%61%7A decodes to "baz" and should match
+    EXPECT_TRUE(
         IsUserAgentAllowed(robotstxt, "FooBot", "http://foo.bar/foo/bar/baz"));
     EXPECT_TRUE(IsUserAgentAllowed(robotstxt, "FooBot",
                                    "http://foo.bar/foo/bar/%62%61%7A"));

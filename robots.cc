@@ -130,8 +130,35 @@ class RobotsMatchStrategy {
   static bool Matches(std::string_view path, std::string_view pattern);
 };
 
+// Helper: decode a hex digit to its value (0-15), or -1 if invalid.
+static int HexDigitValue(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return -1;
+}
+
+// Helper: check if position in string is a valid %XX sequence.
+// If so, returns the decoded character and sets *advance to 3.
+// Otherwise returns the character at pos and sets *advance to 1.
+static char DecodePercentOrChar(std::string_view s, size_t pos, int* advance) {
+  if (pos + 2 < s.size() && s[pos] == '%') {
+    int hi = HexDigitValue(s[pos + 1]);
+    int lo = HexDigitValue(s[pos + 2]);
+    if (hi >= 0 && lo >= 0) {
+      *advance = 3;
+      return static_cast<char>((hi << 4) | lo);
+    }
+  }
+  *advance = 1;
+  return s[pos];
+}
+
 // Returns true if URI path matches the specified pattern. Pattern is anchored
 // at the beginning of path. '$' is special only at the end of pattern.
+//
+// Per RFC 9309 section 2.2.2, percent-encoded characters should match their
+// decoded equivalents (e.g., %2F matches /, %26 matches &).
 //
 // Since 'path' and 'pattern' are both externally determined (by the webmaster),
 // we make sure to have acceptable worst-case performance.
@@ -151,25 +178,39 @@ class RobotsMatchStrategy {
   pos[0] = 0;
   numpos = 1;
 
-  for (auto pat = pattern.begin(); pat != pattern.end(); ++pat) {
-    if (*pat == '$' && pat + 1 == pattern.end()) {
+  for (size_t pat_idx = 0; pat_idx < pattern.size(); ) {
+    char pat_char = pattern[pat_idx];
+
+    if (pat_char == '$' && pat_idx + 1 == pattern.size()) {
       return (pos[numpos - 1] == pathlen);
     }
-    if (*pat == '*') {
+    if (pat_char == '*') {
       numpos = pathlen - pos[0] + 1;
       for (int i = 1; i < numpos; i++) {
         pos[i] = pos[i-1] + 1;
       }
+      ++pat_idx;
     } else {
+      // Decode pattern character (handle %XX sequences)
+      int pat_advance;
+      char decoded_pat = DecodePercentOrChar(pattern, pat_idx, &pat_advance);
+
       // Includes '$' when not at end of pattern.
       int newnumpos = 0;
       for (int i = 0; i < numpos; i++) {
-        if (pos[i] < pathlen && path[pos[i]] == *pat) {
-          pos[newnumpos++] = pos[i] + 1;
+        if (pos[i] < pathlen) {
+          // Decode path character (handle %XX sequences)
+          int path_advance;
+          char decoded_path = DecodePercentOrChar(path, pos[i], &path_advance);
+
+          if (decoded_path == decoded_pat) {
+            pos[newnumpos++] = pos[i] + path_advance;
+          }
         }
       }
       numpos = newnumpos;
       if (numpos == 0) return false;
+      pat_idx += pat_advance;
     }
   }
 
@@ -183,7 +224,7 @@ constexpr std::string_view kHexDigits = "0123456789ABCDEF";
 // robots.txt patterns, so they must be encoded in URLs to match correctly
 // against patterns containing %2A or %24.
 // See: https://github.com/google/robotstxt/issues/57
-static std::string EncodeSpecialPathChars(std::string_view path) {
+static std::string EncodePathForMatching(std::string_view path) {
   // Quick check: if no special chars, return as-is
   bool has_special = false;
   for (char c : path) {
@@ -198,7 +239,7 @@ static std::string EncodeSpecialPathChars(std::string_view path) {
 
   // Encode * as %2A and $ as %24
   std::string result;
-  result.reserve(path.size() + 6);  // Reserve some extra space
+  result.reserve(path.size() + 6);
   for (char c : path) {
     if (c == '*') {
       result += "%2A";
@@ -240,7 +281,7 @@ std::string GetPathParamsQuery(const std::string& url) {
     if (url[0] == '/') {
       size_t hash_pos = url.find('#');
       std::string path = (hash_pos == std::string::npos) ? url : url.substr(0, hash_pos);
-      return EncodeSpecialPathChars(path);
+      return EncodePathForMatching(path);
     }
     return "/";
   }
@@ -248,7 +289,7 @@ std::string GetPathParamsQuery(const std::string& url) {
   std::string result(parsed->get_pathname());
   std::string_view search = parsed->get_search();
   if (!search.empty()) result += search;
-  return result.empty() ? "/" : EncodeSpecialPathChars(result);
+  return result.empty() ? "/" : EncodePathForMatching(result);
 
 #else
   // Fallback: simple URL parsing without ada-url dependency
@@ -280,7 +321,7 @@ std::string GetPathParamsQuery(const std::string& url) {
       if (hash_pos != std::string_view::npos) {
         s = s.substr(0, hash_pos);
       }
-      return EncodeSpecialPathChars("/" + std::string(s));
+      return EncodePathForMatching("/" + std::string(s));
     }
     path_start = slash_pos;
   }
@@ -292,7 +333,7 @@ std::string GetPathParamsQuery(const std::string& url) {
     s = s.substr(0, hash_pos);
   }
 
-  return s.empty() ? "/" : EncodeSpecialPathChars(s);
+  return s.empty() ? "/" : EncodePathForMatching(s);
 #endif
 }
 
