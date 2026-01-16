@@ -251,6 +251,10 @@ class RobotsMatcher : protected RobotsParseHandler {
   bool ever_seen_specific_agent_;  // True if we ever saw a block for our agent.
   bool seen_separator_;            // True if saw any key: value pair.
 
+  // Length of the most specific user-agent we've matched so far.
+  // Used to implement "most specific wins" rule per Google's documentation.
+  size_t best_specific_agent_length_;
+
   // The path we want to pattern match. Not owned and only a valid pointer
   // during the lifetime of *AllowedByRobots calls.
   const char* path_;
