@@ -15,6 +15,7 @@ module RobotsTxt
   # Find the library
   LIB_NAMES = %w[librobots.dylib librobots.so robots.dll].freeze
   LIB_PATHS = [
+    File.expand_path('../../../_build', __dir__),
     File.expand_path('../../../build', __dir__),
     File.expand_path('../../../cmake-build', __dir__),
     '/usr/local/lib',

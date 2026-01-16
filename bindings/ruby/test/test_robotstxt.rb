@@ -39,8 +39,9 @@ class TestRobotsTxt < Minitest::Test
     ROBOTS
 
     refute matcher.allowed?(robots_txt, 'Googlebot', 'https://example.com/google-only/')
-    assert matcher.allowed?(robots_txt, 'Bingbot', 'https://example.com/google-only/')
+    # Check ever_seen_specific_agent right after Googlebot match (state may change on next call)
     assert matcher.ever_seen_specific_agent?
+    assert matcher.allowed?(robots_txt, 'Bingbot', 'https://example.com/google-only/')
   end
 
   def test_crawl_delay

@@ -51,7 +51,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.1.2</version>
                 <configuration>
-                    <argLine>-Djava.library.path=${project.basedir}/../../build:${project.basedir}/../../cmake-build</argLine>
+                    <argLine>-Djava.library.path=${env.ROBOTS_LIB_PATH}:${project.basedir}/../../_build:${project.basedir}/../../build:${project.basedir}/../../cmake-build</argLine>
+                    <environmentVariables>
+                        <LD_LIBRARY_PATH>${env.ROBOTS_LIB_PATH}:${env.LD_LIBRARY_PATH}</LD_LIBRARY_PATH>
+                    </environmentVariables>
                 </configuration>
             </plugin>
         </plugins>

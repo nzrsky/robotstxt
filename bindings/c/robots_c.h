@@ -43,6 +43,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// DLL export/import macros for Windows
+#if defined(_WIN32) || defined(_WIN64)
+  #ifdef DLL_EXPORT
+    #define ROBOTS_API __declspec(dllexport)
+  #else
+    #define ROBOTS_API __declspec(dllimport)
+  #endif
+#else
+  #define ROBOTS_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -75,11 +86,11 @@ typedef struct {
 // Creates a new RobotsMatcher instance.
 // Returns NULL on allocation failure.
 // Caller must free with robots_matcher_free().
-robots_matcher_t* robots_matcher_create(void);
+ROBOTS_API robots_matcher_t* robots_matcher_create(void);
 
 // Frees a RobotsMatcher instance.
 // Safe to call with NULL.
-void robots_matcher_free(robots_matcher_t* matcher);
+ROBOTS_API void robots_matcher_free(robots_matcher_t* matcher);
 
 // =============================================================================
 // URL checking
@@ -97,7 +108,7 @@ void robots_matcher_free(robots_matcher_t* matcher);
 //   url_len:          length of url
 //
 // Returns true if the URL is allowed, false if disallowed.
-bool robots_allowed_by_robots(
+ROBOTS_API bool robots_allowed_by_robots(
     robots_matcher_t* matcher,
     const char* robots_txt, size_t robots_txt_len,
     const char* user_agent, size_t user_agent_len,
@@ -117,7 +128,7 @@ bool robots_allowed_by_robots(
 //   url_len:          length of url
 //
 // Returns true if the URL is allowed, false if disallowed.
-bool robots_allowed_by_robots_multi(
+ROBOTS_API bool robots_allowed_by_robots_multi(
     robots_matcher_t* matcher,
     const char* robots_txt, size_t robots_txt_len,
     const char* const* user_agents, const size_t* user_agent_lens,
@@ -129,64 +140,64 @@ bool robots_allowed_by_robots_multi(
 // =============================================================================
 
 // Returns the line number that matched, or 0 if no match.
-int robots_matching_line(const robots_matcher_t* matcher);
+ROBOTS_API int robots_matching_line(const robots_matcher_t* matcher);
 
 // Returns true if a specific user-agent block was found (not just '*').
-bool robots_ever_seen_specific_agent(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_ever_seen_specific_agent(const robots_matcher_t* matcher);
 
 // =============================================================================
 // Crawl-delay support (non-standard directive)
 // =============================================================================
 
 // Returns true if a crawl-delay was specified for the matched user-agent.
-bool robots_has_crawl_delay(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_has_crawl_delay(const robots_matcher_t* matcher);
 
 // Returns the crawl-delay in seconds, or 0.0 if not specified.
 // Call robots_has_crawl_delay() first to distinguish "not set" from "0".
-double robots_get_crawl_delay(const robots_matcher_t* matcher);
+ROBOTS_API double robots_get_crawl_delay(const robots_matcher_t* matcher);
 
 // =============================================================================
 // Request-rate support (non-standard directive)
 // =============================================================================
 
 // Returns true if a request-rate was specified for the matched user-agent.
-bool robots_has_request_rate(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_has_request_rate(const robots_matcher_t* matcher);
 
 // Gets the request-rate value. Returns false if not specified.
 // On success, fills in the rate struct and returns true.
-bool robots_get_request_rate(const robots_matcher_t* matcher,
-                              robots_request_rate_t* rate);
+ROBOTS_API bool robots_get_request_rate(const robots_matcher_t* matcher,
+                                         robots_request_rate_t* rate);
 
 // =============================================================================
 // Content-Signal support (proposed AI directive)
 // =============================================================================
 
 // Returns true if Content-Signal directive support is compiled in.
-bool robots_content_signal_supported(void);
+ROBOTS_API bool robots_content_signal_supported(void);
 
 // Returns true if a content-signal was specified for the matched user-agent.
-bool robots_has_content_signal(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_has_content_signal(const robots_matcher_t* matcher);
 
 // Gets the content-signal values. Returns false if not specified.
 // On success, fills in the signal struct and returns true.
 // Each field is: -1 = not set, 0 = no, 1 = yes.
-bool robots_get_content_signal(const robots_matcher_t* matcher,
-                                robots_content_signal_t* signal);
+ROBOTS_API bool robots_get_content_signal(const robots_matcher_t* matcher,
+                                           robots_content_signal_t* signal);
 
 // Convenience functions for content-signal (return default true if not set).
-bool robots_allows_ai_train(const robots_matcher_t* matcher);
-bool robots_allows_ai_input(const robots_matcher_t* matcher);
-bool robots_allows_search(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_allows_ai_train(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_allows_ai_input(const robots_matcher_t* matcher);
+ROBOTS_API bool robots_allows_search(const robots_matcher_t* matcher);
 
 // =============================================================================
 // Utility functions
 // =============================================================================
 
 // Validates that a user-agent string contains only valid characters [a-zA-Z_-].
-bool robots_is_valid_user_agent(const char* user_agent, size_t len);
+ROBOTS_API bool robots_is_valid_user_agent(const char* user_agent, size_t len);
 
 // Returns the library version string.
-const char* robots_version(void);
+ROBOTS_API const char* robots_version(void);
 
 #ifdef __cplusplus
 }

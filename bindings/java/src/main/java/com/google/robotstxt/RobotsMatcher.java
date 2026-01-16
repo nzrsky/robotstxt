@@ -35,19 +35,37 @@ public class RobotsMatcher implements AutoCloseable {
         try {
             System.loadLibrary("robots_jni");
         } catch (UnsatisfiedLinkError e) {
-            // Try loading from common paths
-            String[] paths = {
-                "../../build/librobots_jni.dylib",
-                "../../build/librobots_jni.so",
-                "../../cmake-build/librobots_jni.dylib",
-                "../../cmake-build/librobots_jni.so"
+            // Try loading from environment variable or common paths
+            java.util.List<String> paths = new java.util.ArrayList<>();
+
+            // Check ROBOTS_LIB_PATH environment variable first
+            String envPath = System.getenv("ROBOTS_LIB_PATH");
+            if (envPath != null && !envPath.isEmpty()) {
+                paths.add(envPath + "/librobots_jni.dylib");
+                paths.add(envPath + "/librobots_jni.so");
+                paths.add(envPath + "/robots_jni.dll");
+            }
+
+            // Common build paths
+            String[] commonPaths = {
+                "_build", "build", "cmake-build", "cmake-build-release",
+                "../../_build", "../../build", "../../cmake-build"
             };
+            for (String base : commonPaths) {
+                paths.add(base + "/librobots_jni.dylib");
+                paths.add(base + "/librobots_jni.so");
+                paths.add(base + "/robots_jni.dll");
+            }
+
             boolean loaded = false;
             for (String path : paths) {
                 try {
-                    System.load(new java.io.File(path).getAbsolutePath());
-                    loaded = true;
-                    break;
+                    java.io.File f = new java.io.File(path);
+                    if (f.exists()) {
+                        System.load(f.getAbsolutePath());
+                        loaded = true;
+                        break;
+                    }
                 } catch (UnsatisfiedLinkError ignored) {
                 }
             }

@@ -60,8 +60,9 @@ public class RobotsMatcherTest {
                               "User-agent: *\n" +
                               "Disallow: /admin/\n";
             assertFalse(matcher.isAllowed(robotsTxt, "Googlebot", "https://example.com/google-only/"));
-            assertTrue(matcher.isAllowed(robotsTxt, "Bingbot", "https://example.com/google-only/"));
+            // Check everSeenSpecificAgent right after Googlebot match (state may change on next call)
             assertTrue(matcher.everSeenSpecificAgent());
+            assertTrue(matcher.isAllowed(robotsTxt, "Bingbot", "https://example.com/google-only/"));
         }
     }
 

@@ -27,6 +27,7 @@ def _find_library() -> str:
         Path(__file__).parent.parent,
         Path(__file__).parent.parent.parent,
         # Build directories
+        Path(__file__).parent.parent.parent.parent / "_build",
         Path(__file__).parent.parent.parent.parent / "cmake-build",
         Path(__file__).parent.parent.parent.parent / "build",
         # System paths
@@ -34,9 +35,13 @@ def _find_library() -> str:
         Path("/usr/lib"),
     ]
 
-    # Add LD_LIBRARY_PATH / DYLD_LIBRARY_PATH
-    env_path = os.environ.get("LD_LIBRARY_PATH", "") or os.environ.get("DYLD_LIBRARY_PATH", "")
-    for p in env_path.split(":"):
+    # Add ROBOTS_LIB_PATH (cross-platform), LD_LIBRARY_PATH, DYLD_LIBRARY_PATH
+    robots_lib_path = os.environ.get("ROBOTS_LIB_PATH", "")
+    if robots_lib_path:
+        search_paths.append(Path(robots_lib_path))
+    ld_path = os.environ.get("LD_LIBRARY_PATH", "") or os.environ.get("DYLD_LIBRARY_PATH", "")
+    path_sep = ";" if sys.platform == "win32" else ":"
+    for p in ld_path.split(path_sep):
         if p:
             search_paths.append(Path(p))
 
