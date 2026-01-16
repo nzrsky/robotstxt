@@ -182,6 +182,22 @@ TEST(RobotsUnittest, ID_LineSyntax_Groups_OtherRules) {
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot", url));
     EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "BarBot", url));
   }
+  // Test case from https://github.com/google/robotstxt/issues/51
+  // Crawl-delay directive should not close the user-agent group.
+  // This test verifies that Crawl-delay (like Sitemap and unknown directives)
+  // does not act as a group separator.
+  {
+    const std::string_view robotstxt =
+        "User-agent: FooBot\n"
+        "Crawl-delay: 10\n"
+        "User-agent: *\n"
+        "Disallow: /\n";
+    std::string url = "http://example.com/";
+    // FooBot and * are in the same group because Crawl-delay doesn't separate.
+    // Both should be blocked by Disallow: /
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "FooBot", url));
+    EXPECT_FALSE(IsUserAgentAllowed(robotstxt, "BarBot", url));
+  }
 }
 
 // Test based on the documentation at
