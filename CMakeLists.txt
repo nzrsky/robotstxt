@@ -95,7 +95,7 @@ INCLUDE_DIRECTORIES(.)
 
 SET(LIBROBOTS_LIBS)
 
-SET(robots_SRCS ./robots.cc)
+SET(robots_SRCS ./robots.cc ./robots_c.cc)
 
 ADD_LIBRARY(robots SHARED ${robots_SRCS})
 TARGET_LINK_LIBRARIES(robots ada)
@@ -140,7 +140,10 @@ IF(ROBOTS_INSTALL)
         ARCHIVE DESTINATION lib
     )
 
-    INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/robots.h DESTINATION include)
+    INSTALL(FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/robots.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/robots_c.h
+        DESTINATION include)
 
     INSTALL(TARGETS robots-main DESTINATION bin)
 ENDIF(ROBOTS_INSTALL)

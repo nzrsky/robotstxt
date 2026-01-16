@@ -19,6 +19,8 @@ OUTPUT_DIR = SCRIPT_DIR
 # Files to process
 ROBOTS_HEADER = os.path.join(ROOT_DIR, "robots.h")
 ROBOTS_SOURCE = os.path.join(ROOT_DIR, "robots.cc")
+ROBOTS_C_HEADER = os.path.join(ROOT_DIR, "robots_c.h")
+ROBOTS_C_SOURCE = os.path.join(ROOT_DIR, "robots_c.cc")
 REPORTING_HEADER = os.path.join(ROOT_DIR, "reporting_robots.h")
 REPORTING_SOURCE = os.path.join(ROOT_DIR, "reporting_robots.cc")
 
@@ -287,6 +289,114 @@ def generate_reporting_robots_h():
     return '\n'.join(lines)
 
 
+def generate_robots_c_h():
+    """Generate single-header robots_c.h with C API."""
+    commit, date = get_git_info()
+
+    robots_h = read_file(ROBOTS_HEADER)
+    robots_cc = read_file(ROBOTS_SOURCE)
+    robots_c_h = read_file(ROBOTS_C_HEADER)
+    robots_c_cc = read_file(ROBOTS_C_SOURCE)
+
+    # Strip include guards from robots.h
+    robots_h_inner = strip_include_guards(robots_h)
+
+    # Remove #include "robots_c.h" and "robots.h" from robots_c.cc
+    robots_c_cc = remove_include(robots_c_cc, "robots_c.h")
+    robots_c_cc = remove_include(robots_c_cc, "robots.h")
+
+    # Find where to insert robots.h content (after #define ROBOTS_C_H)
+    lines = robots_c_h.split('\n')
+    insert_idx = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith('#define ') and 'ROBOTS_C_H' in line:
+            insert_idx = i + 1
+            break
+
+    # We need to wrap C++ parts for C compatibility
+    cpp_section = [
+        "",
+        "#ifdef __cplusplus",
+        "// === Begin embedded robots.h (C++ only) ===",
+        robots_h_inner,
+        "// === End embedded robots.h ===",
+        "#endif  // __cplusplus",
+        ""
+    ]
+
+    lines = lines[:insert_idx] + cpp_section + lines[insert_idx:]
+    robots_c_h = '\n'.join(lines)
+
+    # Extract implementations
+    robots_impl = extract_implementation(robots_cc, ["robots.h"])
+    robots_c_impl = extract_implementation(robots_c_cc, ["robots_c.h", "robots.h"])
+
+    # Find last #endif
+    lines = robots_c_h.split('\n')
+    last_endif_idx = -1
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip().startswith('#endif') and 'ROBOTS_C_H' in lines[i]:
+            last_endif_idx = i
+            break
+    if last_endif_idx == -1:
+        for i in range(len(lines) - 1, -1, -1):
+            if lines[i].strip().startswith('#endif'):
+                last_endif_idx = i
+                break
+
+    impl_block = f'''
+// ============================================================================
+// IMPLEMENTATION (C++ required for implementation)
+// ============================================================================
+// Generated: {date}
+// Commit: {commit or 'unknown'}
+//
+// Define ROBOTS_IMPLEMENTATION in exactly one C++ source file before including
+// this header to include the implementation:
+//
+//   #define ROBOTS_IMPLEMENTATION
+//   #include "robots_c.h"
+//
+// Note: The implementation requires C++, but the API can be called from C.
+// ============================================================================
+
+#if defined(ROBOTS_IMPLEMENTATION) && defined(__cplusplus)
+
+// === Begin robots.cc implementation ===
+{robots_impl}
+// === End robots.cc implementation ===
+
+// === Begin robots_c.cc implementation ===
+{robots_c_impl}
+// === End robots_c.cc implementation ===
+
+#endif  // ROBOTS_IMPLEMENTATION && __cplusplus
+
+'''
+
+    lines = lines[:last_endif_idx] + impl_block.split('\n') + lines[last_endif_idx:]
+    amalgamated = '\n'.join(lines)
+
+    # Add notice
+    notice = f'''//
+// *** AMALGAMATED SINGLE-HEADER VERSION ***
+// Generated: {date}
+// Commit: {commit or 'unknown'}
+//
+// This file is auto-generated. Do not edit directly.
+// Run: python3 singleheader/amalgamate.py
+//
+'''
+
+    lines = amalgamated.split('\n')
+    for i, line in enumerate(lines):
+        if not line.strip().startswith('//') and line.strip() != '':
+            lines.insert(i, notice)
+            break
+
+    return '\n'.join(lines)
+
+
 def main():
     print("Generating robots.h...")
     robots = generate_robots_h()
@@ -294,6 +404,13 @@ def main():
     with open(output_robots, "w", encoding="utf-8") as f:
         f.write(robots)
     print(f"  -> {output_robots}")
+
+    print("Generating robots_c.h...")
+    robots_c = generate_robots_c_h()
+    output_robots_c = os.path.join(OUTPUT_DIR, "robots_c.h")
+    with open(output_robots_c, "w", encoding="utf-8") as f:
+        f.write(robots_c)
+    print(f"  -> {output_robots_c}")
 
     print("Generating reporting_robots.h...")
     reporting = generate_reporting_robots_h()

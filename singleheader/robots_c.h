@@ -1,3 +1,41 @@
+// Copyright 1999 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// -----------------------------------------------------------------------------
+// File: robots_c.h
+// -----------------------------------------------------------------------------
+//
+// C API for the robots.txt parser and matcher library.
+//
+// Example usage:
+//
+//   robots_matcher_t* matcher = robots_matcher_create();
+//
+//   const char* robots_txt = "User-agent: *\nDisallow: /admin/\n";
+//   const char* user_agent = "Googlebot";
+//   const char* url = "https://example.com/admin/secret";
+//
+//   bool allowed = robots_allowed_by_robots(
+//       matcher, robots_txt, strlen(robots_txt),
+//       user_agent, strlen(user_agent),
+//       url, strlen(url));
+//
+//   printf("Access: %s\n", allowed ? "allowed" : "disallowed");
+//
+//   robots_matcher_free(matcher);
+//
+
 //
 // *** AMALGAMATED SINGLE-HEADER VERSION ***
 // Generated: 2026-01-16 22:36:39 +0200
@@ -7,10 +45,11 @@
 // Run: python3 singleheader/amalgamate.py
 //
 
-#ifndef THIRD_PARTY_ROBOTSTXT_REPORTING_ROBOTS_H_
-#define THIRD_PARTY_ROBOTSTXT_REPORTING_ROBOTS_H_
+#ifndef ROBOTS_C_H
+#define ROBOTS_C_H
 
-// === Begin embedded robots.h ===
+#ifdef __cplusplus
+// === Begin embedded robots.h (C++ only) ===
 // Copyright 1999 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -386,100 +425,179 @@ class RobotsMatcher : protected RobotsParseHandler {
 
 }  // namespace googlebot
 // === End embedded robots.h ===
+#endif  // __cplusplus
 
 
-#include <map>
-#include <string_view>
-#include <vector>
-namespace googlebot {
-struct RobotsParsedLine {
-  enum RobotsTagName {
-    // Identifier for skipped lines. A line may be skipped because it's
-    // unparseable, or because it contains no recognizable key. Note that
-    // comment lines are also skipped, they're no-op for parsing. For example:
-    //   random characters
-    //   unicorn: <value>
-    //   # comment line
-    // Same thing for empty lines.
-    kUnknown = 0,
-    kUserAgent = 1,
-    kAllow = 2,
-    kDisallow = 3,
-    kSitemap = 4,
-    // Non-standard but widely used directives.
-    kCrawlDelay = 5,
-    kRequestRate = 6,
-#if ROBOTS_SUPPORT_CONTENT_SIGNAL
-    kContentSignal = 7,
-#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
-    // Identifier for parseable lines whose key is recognized, but unused.
-    // See kUnsupportedTags in reporting_robots.cc for a list of recognized,
-    // but unused keys. For example:
-    //   noindex: <value>
-    //   noarchive: <value>
-    kUnused = 8,
-  };
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-  int line_num = 0;
-  RobotsTagName tag_name = kUnknown;
-  bool is_typo = false;
-  RobotsParseHandler::LineMetadata metadata;
-};
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-class RobotsParsingReporter : public googlebot::RobotsParseHandler {
- public:
-  void HandleRobotsStart() override;
-  void HandleRobotsEnd() override;
-  void HandleUserAgent(int line_num, std::string_view line_value) override;
-  void HandleAllow(int line_num, std::string_view line_value) override;
-  void HandleDisallow(int line_num, std::string_view line_value) override;
-  void HandleSitemap(int line_num, std::string_view line_value) override;
-  void HandleCrawlDelay(int line_num, double value) override;
-  void HandleRequestRate(int line_num, const RequestRate& rate) override;
-#if ROBOTS_SUPPORT_CONTENT_SIGNAL
-  void HandleContentSignal(int line_num, const ContentSignal& signal) override;
-#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
-  void HandleUnknownAction(int line_num, std::string_view action,
-                           std::string_view line_value) override;
-  void ReportLineMetadata(int line_num, const LineMetadata& metadata) override;
+// =============================================================================
+// Types
+// =============================================================================
 
-  int last_line_seen() const { return last_line_seen_; }
-  int valid_directives() const { return valid_directives_; }
-  int unused_directives() const { return unused_directives_; }
-  std::vector<RobotsParsedLine> parse_results() const {
-    std::vector<RobotsParsedLine> vec;
-    for (const auto& entry : robots_parse_results_) {
-      vec.push_back(entry.second);
-    }
-    return vec;
-  }
+// Opaque pointer to RobotsMatcher instance.
+typedef struct robots_matcher_s robots_matcher_t;
 
- private:
-  void Digest(int line_num, RobotsParsedLine::RobotsTagName parsed_tag);
+// Request-rate value (requests per time period).
+typedef struct {
+  int requests;  // Number of requests allowed
+  int seconds;   // Time period in seconds
+} robots_request_rate_t;
 
-  // Indexed and sorted by line number.
-  std::map<int, RobotsParsedLine> robots_parse_results_;
-  int last_line_seen_ = 0;
-  int valid_directives_ = 0;
-  int unused_directives_ = 0;
-};
-}  // namespace googlebot
+// Content-Signal values for AI content preferences.
+// Each field uses a tri-state: -1 = not set, 0 = no, 1 = yes.
+typedef struct {
+  int8_t ai_train;  // ai-train: Training or fine-tuning AI models
+  int8_t ai_input;  // ai-input: Using content in AI models for real-time generation
+  int8_t search;    // search: Building search indexes and providing results
+} robots_content_signal_t;
+
+// =============================================================================
+// Matcher lifecycle
+// =============================================================================
+
+// Creates a new RobotsMatcher instance.
+// Returns NULL on allocation failure.
+// Caller must free with robots_matcher_free().
+robots_matcher_t* robots_matcher_create(void);
+
+// Frees a RobotsMatcher instance.
+// Safe to call with NULL.
+void robots_matcher_free(robots_matcher_t* matcher);
+
+// =============================================================================
+// URL checking
+// =============================================================================
+
+// Checks if a URL is allowed for a single user-agent.
+//
+// Parameters:
+//   matcher:          RobotsMatcher instance (will be modified)
+//   robots_txt:       robots.txt content
+//   robots_txt_len:   length of robots_txt
+//   user_agent:       user-agent string to check
+//   user_agent_len:   length of user_agent
+//   url:              URL to check (must be %-encoded per RFC3986)
+//   url_len:          length of url
+//
+// Returns true if the URL is allowed, false if disallowed.
+bool robots_allowed_by_robots(
+    robots_matcher_t* matcher,
+    const char* robots_txt, size_t robots_txt_len,
+    const char* user_agent, size_t user_agent_len,
+    const char* url, size_t url_len);
+
+// Checks if a URL is allowed for multiple user-agents.
+// Rules from all matching user-agents are combined.
+//
+// Parameters:
+//   matcher:          RobotsMatcher instance (will be modified)
+//   robots_txt:       robots.txt content
+//   robots_txt_len:   length of robots_txt
+//   user_agents:      array of user-agent strings
+//   user_agent_lens:  array of user-agent string lengths
+//   num_user_agents:  number of user-agents
+//   url:              URL to check (must be %-encoded per RFC3986)
+//   url_len:          length of url
+//
+// Returns true if the URL is allowed, false if disallowed.
+bool robots_allowed_by_robots_multi(
+    robots_matcher_t* matcher,
+    const char* robots_txt, size_t robots_txt_len,
+    const char* const* user_agents, const size_t* user_agent_lens,
+    size_t num_user_agents,
+    const char* url, size_t url_len);
+
+// =============================================================================
+// Matcher state accessors (call after robots_allowed_by_robots)
+// =============================================================================
+
+// Returns the line number that matched, or 0 if no match.
+int robots_matching_line(const robots_matcher_t* matcher);
+
+// Returns true if a specific user-agent block was found (not just '*').
+bool robots_ever_seen_specific_agent(const robots_matcher_t* matcher);
+
+// =============================================================================
+// Crawl-delay support (non-standard directive)
+// =============================================================================
+
+// Returns true if a crawl-delay was specified for the matched user-agent.
+bool robots_has_crawl_delay(const robots_matcher_t* matcher);
+
+// Returns the crawl-delay in seconds, or 0.0 if not specified.
+// Call robots_has_crawl_delay() first to distinguish "not set" from "0".
+double robots_get_crawl_delay(const robots_matcher_t* matcher);
+
+// =============================================================================
+// Request-rate support (non-standard directive)
+// =============================================================================
+
+// Returns true if a request-rate was specified for the matched user-agent.
+bool robots_has_request_rate(const robots_matcher_t* matcher);
+
+// Gets the request-rate value. Returns false if not specified.
+// On success, fills in the rate struct and returns true.
+bool robots_get_request_rate(const robots_matcher_t* matcher,
+                              robots_request_rate_t* rate);
+
+// =============================================================================
+// Content-Signal support (proposed AI directive)
+// =============================================================================
+
+// Returns true if Content-Signal directive support is compiled in.
+bool robots_content_signal_supported(void);
+
+// Returns true if a content-signal was specified for the matched user-agent.
+bool robots_has_content_signal(const robots_matcher_t* matcher);
+
+// Gets the content-signal values. Returns false if not specified.
+// On success, fills in the signal struct and returns true.
+// Each field is: -1 = not set, 0 = no, 1 = yes.
+bool robots_get_content_signal(const robots_matcher_t* matcher,
+                                robots_content_signal_t* signal);
+
+// Convenience functions for content-signal (return default true if not set).
+bool robots_allows_ai_train(const robots_matcher_t* matcher);
+bool robots_allows_ai_input(const robots_matcher_t* matcher);
+bool robots_allows_search(const robots_matcher_t* matcher);
+
+// =============================================================================
+// Utility functions
+// =============================================================================
+
+// Validates that a user-agent string contains only valid characters [a-zA-Z_-].
+bool robots_is_valid_user_agent(const char* user_agent, size_t len);
+
+// Returns the library version string.
+const char* robots_version(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 // ============================================================================
-// IMPLEMENTATION
+// IMPLEMENTATION (C++ required for implementation)
 // ============================================================================
 // Generated: 2026-01-16 22:36:39 +0200
 // Commit: 3281b01
 //
-// Define ROBOTS_IMPLEMENTATION in exactly one source file before including
+// Define ROBOTS_IMPLEMENTATION in exactly one C++ source file before including
 // this header to include the implementation:
 //
 //   #define ROBOTS_IMPLEMENTATION
-//   #include "reporting_robots.h"
+//   #include "robots_c.h"
 //
+// Note: The implementation requires C++, but the API can be called from C.
 // ============================================================================
 
-#ifdef ROBOTS_IMPLEMENTATION
+#if defined(ROBOTS_IMPLEMENTATION) && defined(__cplusplus)
 
 // === Begin robots.cc implementation ===
 #include <stdlib.h>
@@ -1687,123 +1805,225 @@ bool ParsedRobotsKey::KeyIsContentSignal(std::string_view key,
 
 // === End robots.cc implementation ===
 
-// === Begin reporting_robots.cc implementation ===
-#include <algorithm>
-#include <cctype>
+// === Begin robots_c.cc implementation ===
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace {
-std::string AsciiStrToLower(std::string_view s) {
-  std::string result(s);
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  return result;
-}
-}  // namespace
+#define ROBOTS_VERSION "1.0.0"
 
-namespace googlebot {
-// The kUnsupportedTags tags are popular tags in robots.txt files, but Google
-// doesn't use them for anything. Other search engines may, however, so we
-// parse them out so users of the library can highlight them for their own
-// users if they so wish.
-// These are different from the "unknown" tags, since we know that these may
-// have some use cases; to the best of our knowledge other tags we find, don't.
-// (for example, "unicorn" from "unicorn: /value")
-// Note: "crawl-delay" and "request-rate" are now supported tags.
-// "content-signal" is supported when ROBOTS_SUPPORT_CONTENT_SIGNAL is enabled.
-static const std::vector<std::string> kUnsupportedTags = {
-    // Yandex/Bing extensions
-    "clean-param", "host",
-    // Meta-like directives (some sites use these in robots.txt)
-    "noindex", "noarchive", "nofollow",
-    // AI/LLM related directives
-#if !ROBOTS_SUPPORT_CONTENT_SIGNAL
-    "content-signal",
-#endif  // !ROBOTS_SUPPORT_CONTENT_SIGNAL
-    "llm-policy", "llm", "llm-content", "llm-full-content", "llm-full",
-    // Other
-    "license"};
+// =============================================================================
+// Internal wrapper struct
+// =============================================================================
 
-void RobotsParsingReporter::Digest(int line_num,
-                                   RobotsParsedLine::RobotsTagName parsed_tag) {
-  if (line_num > last_line_seen_) {
-    last_line_seen_ = line_num;
+struct robots_matcher_s {
+  googlebot::RobotsMatcher matcher;
+};
+
+// =============================================================================
+// Matcher lifecycle
+// =============================================================================
+
+extern "C" robots_matcher_t* robots_matcher_create(void) {
+  try {
+    return new robots_matcher_t();
+  } catch (...) {
+    return nullptr;
   }
-  if (parsed_tag != RobotsParsedLine::kUnknown &&
-      parsed_tag != RobotsParsedLine::kUnused) {
-    ++valid_directives_;
+}
+
+extern "C" void robots_matcher_free(robots_matcher_t* matcher) {
+  delete matcher;
+}
+
+// =============================================================================
+// URL checking
+// =============================================================================
+
+extern "C" bool robots_allowed_by_robots(
+    robots_matcher_t* matcher,
+    const char* robots_txt, size_t robots_txt_len,
+    const char* user_agent, size_t user_agent_len,
+    const char* url, size_t url_len) {
+  if (!matcher || !robots_txt || !user_agent || !url) {
+    return true;  // Allow on invalid input
   }
 
-  RobotsParsedLine& line = robots_parse_results_[line_num];
-  line.line_num = line_num;
-  line.tag_name = parsed_tag;
+  std::string_view robots_body(robots_txt, robots_txt_len);
+  std::string agent(user_agent, user_agent_len);
+  std::string target_url(url, url_len);
+
+  return matcher->matcher.OneAgentAllowedByRobots(robots_body, agent, target_url);
 }
 
-void RobotsParsingReporter::ReportLineMetadata(int line_num,
-                                               const LineMetadata& metadata) {
-  if (line_num > last_line_seen_) {
-    last_line_seen_ = line_num;
+extern "C" bool robots_allowed_by_robots_multi(
+    robots_matcher_t* matcher,
+    const char* robots_txt, size_t robots_txt_len,
+    const char* const* user_agents, const size_t* user_agent_lens,
+    size_t num_user_agents,
+    const char* url, size_t url_len) {
+  if (!matcher || !robots_txt || !user_agents || !user_agent_lens || !url) {
+    return true;  // Allow on invalid input
   }
-  RobotsParsedLine& line = robots_parse_results_[line_num];
-  line.line_num = line_num;
-  line.is_typo = metadata.is_acceptable_typo;
-  line.metadata = metadata;
+
+  std::string_view robots_body(robots_txt, robots_txt_len);
+  std::vector<std::string> agents;
+  agents.reserve(num_user_agents);
+  for (size_t i = 0; i < num_user_agents; ++i) {
+    agents.emplace_back(user_agents[i], user_agent_lens[i]);
+  }
+  std::string target_url(url, url_len);
+
+  return matcher->matcher.AllowedByRobots(robots_body, &agents, target_url);
 }
 
-void RobotsParsingReporter::HandleRobotsStart() {
-  last_line_seen_ = 0;
-  valid_directives_ = 0;
-  unused_directives_ = 0;
+// =============================================================================
+// Matcher state accessors
+// =============================================================================
+
+extern "C" int robots_matching_line(const robots_matcher_t* matcher) {
+  if (!matcher) return 0;
+  return matcher->matcher.matching_line();
 }
-void RobotsParsingReporter::HandleRobotsEnd() {}
-void RobotsParsingReporter::HandleUserAgent(int line_num,
-                                            std::string_view line_value) {
-  Digest(line_num, RobotsParsedLine::kUserAgent);
+
+extern "C" bool robots_ever_seen_specific_agent(const robots_matcher_t* matcher) {
+  if (!matcher) return false;
+  return matcher->matcher.ever_seen_specific_agent();
 }
-void RobotsParsingReporter::HandleAllow(int line_num,
-                                        std::string_view line_value) {
-  Digest(line_num, RobotsParsedLine::kAllow);
+
+// =============================================================================
+// Crawl-delay support
+// =============================================================================
+
+extern "C" bool robots_has_crawl_delay(const robots_matcher_t* matcher) {
+  if (!matcher) return false;
+  return matcher->matcher.GetCrawlDelay().has_value();
 }
-void RobotsParsingReporter::HandleDisallow(int line_num,
-                                           std::string_view line_value) {
-  Digest(line_num, RobotsParsedLine::kDisallow);
+
+extern "C" double robots_get_crawl_delay(const robots_matcher_t* matcher) {
+  if (!matcher) return 0.0;
+  auto delay = matcher->matcher.GetCrawlDelay();
+  return delay.value_or(0.0);
 }
-void RobotsParsingReporter::HandleSitemap(int line_num,
-                                          std::string_view line_value) {
-  Digest(line_num, RobotsParsedLine::kSitemap);
+
+// =============================================================================
+// Request-rate support
+// =============================================================================
+
+extern "C" bool robots_has_request_rate(const robots_matcher_t* matcher) {
+  if (!matcher) return false;
+  return matcher->matcher.GetRequestRate().has_value();
 }
-void RobotsParsingReporter::HandleCrawlDelay(int line_num, double value) {
-  Digest(line_num, RobotsParsedLine::kCrawlDelay);
+
+extern "C" bool robots_get_request_rate(const robots_matcher_t* matcher,
+                                         robots_request_rate_t* rate) {
+  if (!matcher || !rate) return false;
+  auto opt_rate = matcher->matcher.GetRequestRate();
+  if (!opt_rate.has_value()) return false;
+  rate->requests = opt_rate->requests;
+  rate->seconds = opt_rate->seconds;
+  return true;
 }
-void RobotsParsingReporter::HandleRequestRate(int line_num,
-                                              const RequestRate& rate) {
-  Digest(line_num, RobotsParsedLine::kRequestRate);
-}
+
+// =============================================================================
+// Content-Signal support
+// =============================================================================
+
+extern "C" bool robots_content_signal_supported(void) {
 #if ROBOTS_SUPPORT_CONTENT_SIGNAL
-void RobotsParsingReporter::HandleContentSignal(int line_num,
-                                                const ContentSignal& signal) {
-  Digest(line_num, RobotsParsedLine::kContentSignal);
-}
-#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
-void RobotsParsingReporter::HandleUnknownAction(int line_num,
-                                                std::string_view action,
-                                                std::string_view line_value) {
-  RobotsParsedLine::RobotsTagName rtn =
-      std::count(kUnsupportedTags.begin(), kUnsupportedTags.end(),
-                 AsciiStrToLower(action)) > 0
-          ? RobotsParsedLine::kUnused
-          : RobotsParsedLine::kUnknown;
-  unused_directives_++;
-  Digest(line_num, rtn);
+  return true;
+#else
+  return false;
+#endif
 }
 
-}  // namespace googlebot
+extern "C" bool robots_has_content_signal(const robots_matcher_t* matcher) {
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  if (!matcher) return false;
+  return matcher->matcher.GetContentSignal().has_value();
+#else
+  (void)matcher;
+  return false;
+#endif
+}
 
-// === End reporting_robots.cc implementation ===
+extern "C" bool robots_get_content_signal(const robots_matcher_t* matcher,
+                                           robots_content_signal_t* signal) {
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  if (!matcher || !signal) return false;
+  auto opt_signal = matcher->matcher.GetContentSignal();
+  if (!opt_signal.has_value()) return false;
 
-#endif  // ROBOTS_IMPLEMENTATION
+  signal->ai_train = opt_signal->ai_train.has_value()
+                         ? (opt_signal->ai_train.value() ? 1 : 0)
+                         : -1;
+  signal->ai_input = opt_signal->ai_input.has_value()
+                         ? (opt_signal->ai_input.value() ? 1 : 0)
+                         : -1;
+  signal->search = opt_signal->search.has_value()
+                       ? (opt_signal->search.value() ? 1 : 0)
+                       : -1;
+  return true;
+#else
+  (void)matcher;
+  (void)signal;
+  return false;
+#endif
+}
+
+extern "C" bool robots_allows_ai_train(const robots_matcher_t* matcher) {
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  if (!matcher) return true;
+  auto opt_signal = matcher->matcher.GetContentSignal();
+  if (!opt_signal.has_value()) return true;
+  return opt_signal->AllowsAiTrain();
+#else
+  (void)matcher;
+  return true;
+#endif
+}
+
+extern "C" bool robots_allows_ai_input(const robots_matcher_t* matcher) {
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  if (!matcher) return true;
+  auto opt_signal = matcher->matcher.GetContentSignal();
+  if (!opt_signal.has_value()) return true;
+  return opt_signal->AllowsAiInput();
+#else
+  (void)matcher;
+  return true;
+#endif
+}
+
+extern "C" bool robots_allows_search(const robots_matcher_t* matcher) {
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  if (!matcher) return true;
+  auto opt_signal = matcher->matcher.GetContentSignal();
+  if (!opt_signal.has_value()) return true;
+  return opt_signal->AllowsSearch();
+#else
+  (void)matcher;
+  return true;
+#endif
+}
+
+// =============================================================================
+// Utility functions
+// =============================================================================
+
+extern "C" bool robots_is_valid_user_agent(const char* user_agent, size_t len) {
+  if (!user_agent || len == 0) return false;
+  return googlebot::RobotsMatcher::IsValidUserAgentToObey(
+      std::string_view(user_agent, len));
+}
+
+extern "C" const char* robots_version(void) {
+  return ROBOTS_VERSION;
+}
+
+// === End robots_c.cc implementation ===
+
+#endif  // ROBOTS_IMPLEMENTATION && __cplusplus
 
 
-#endif  // THIRD_PARTY_ROBOTSTXT_REPORTING_ROBOTS_H_
+#endif  // ROBOTS_C_H
