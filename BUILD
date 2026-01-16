@@ -14,11 +14,6 @@ cc_library(
     hdrs = [
         "robots.h",
     ],
-    deps = [
-        "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/container:fixed_array",
-        "@abseil-cpp//absl/strings",
-    ],
 )
 
 cc_library(
@@ -27,8 +22,6 @@ cc_library(
     hdrs = ["reporting_robots.h"],
     deps = [
         ":robots",
-        "@abseil-cpp//absl/container:btree",
-        "@abseil-cpp//absl/strings",
     ],
 )
 
@@ -37,7 +30,6 @@ cc_test(
     srcs = ["robots_test.cc"],
     deps = [
         ":robots",
-        "@abseil-cpp//absl/strings",
         "@googletest//:gtest_main",
     ],
 )
@@ -48,7 +40,6 @@ cc_test(
     deps = [
         ":reporting_robots",
         ":robots",
-        "@abseil-cpp//absl/strings",
         "@googletest//:gtest_main",
     ],
 )

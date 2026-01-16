@@ -1,13 +1,12 @@
 #include "reporting_robots.h"
 
 #include <ostream>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
-#include "absl/strings/string_view.h"
 #include "robots.h"
 
 using ::googlebot::RobotsParsedLine;
@@ -15,18 +14,30 @@ using ::googlebot::RobotsParseHandler;
 using ::googlebot::RobotsParsingReporter;
 
 namespace {
+std::vector<std::string_view> StrSplit(std::string_view s, char delim) {
+  std::vector<std::string_view> result;
+  size_t start = 0;
+  size_t end;
+  while ((end = s.find(delim, start)) != std::string_view::npos) {
+    result.push_back(s.substr(start, end - start));
+    start = end + 1;
+  }
+  result.push_back(s.substr(start));
+  return result;
+}
+
 // Allows debugging the contents of the LineMetadata struct.
 std::string LineMetadataToString(const RobotsParseHandler::LineMetadata& line) {
-  // clang-format off
-  return absl::StrCat(
-      "{ is_empty: ", line.is_empty,
-      " has_directive: ", line.has_directive,
-      " has_comment: ", line.has_comment,
-      " is_comment: ", line.is_comment,
-      " is_acceptable_typo: ", line.is_acceptable_typo,
-      " is_line_too_long: ", line.is_line_too_long,
-      " is_missing_colon_separator: ", line.is_missing_colon_separator, " }");
-  // clang-format on
+  std::ostringstream oss;
+  oss << "{ is_empty: " << line.is_empty
+      << " has_directive: " << line.has_directive
+      << " has_comment: " << line.has_comment
+      << " is_comment: " << line.is_comment
+      << " is_acceptable_typo: " << line.is_acceptable_typo
+      << " is_line_too_long: " << line.is_line_too_long
+      << " is_missing_colon_separator: " << line.is_missing_colon_separator
+      << " }";
+  return oss.str();
 }
 
 std::string TagNameToString(RobotsParsedLine::RobotsTagName tag_name) {
@@ -48,14 +59,16 @@ std::string TagNameToString(RobotsParsedLine::RobotsTagName tag_name) {
 
 // Allows debugging the contents of the RobotsParsedLine struct.
 std::string RobotsParsedLineToString(const RobotsParsedLine& line) {
-  return absl::StrCat("{\n lin_num:", line.line_num,
-                      "\n tag_name: ", TagNameToString(line.tag_name),
-                      "\n is_typo: ", line.is_typo,
-                      "\n metadata: ", LineMetadataToString(line.metadata),
-                      "\n}");
+  std::ostringstream oss;
+  oss << "{\n lin_num:" << line.line_num
+      << "\n tag_name: " << TagNameToString(line.tag_name)
+      << "\n is_typo: " << line.is_typo
+      << "\n metadata: " << LineMetadataToString(line.metadata)
+      << "\n}";
+  return oss.str();
 }
 
-void expectLineToParseTo(const std::vector<absl::string_view>& lines,
+void expectLineToParseTo(const std::vector<std::string_view>& lines,
                          const std::vector<RobotsParsedLine>& parse_results,
                          const RobotsParsedLine& expected_result) {
   int line_num = expected_result.line_num;
@@ -118,7 +131,7 @@ TEST(RobotsUnittest, LinesNumbersAreCountedCorrectly) {
   EXPECT_EQ(8, report.valid_directives());
   EXPECT_EQ(16, report.last_line_seen());
   EXPECT_EQ(report.parse_results().size(), report.last_line_seen());
-  std::vector<absl::string_view> lines = absl::StrSplit(kSimpleFile, '\n');
+  std::vector<std::string_view> lines = StrSplit(kSimpleFile, '\n');
 
   // For line "User-Agent: foo\n"         // 1
   expectLineToParseTo(
@@ -352,15 +365,15 @@ TEST(RobotsUnittest, LinesTooLongReportedCorrectly) {
   std::string robotstxt = "user-agent: foo\n";
   std::string longline = "/x/";
   while (longline.size() < kMaxLineLen) {
-    absl::StrAppend(&longline, "a");
+    longline += "a";
   }
-  absl::StrAppend(&robotstxt, disallow, longline, "\n", allow);
+  robotstxt += disallow + longline + "\n" + allow;
 
   googlebot::ParseRobotsTxt(robotstxt, &report);
   EXPECT_EQ(3, report.valid_directives());
   EXPECT_EQ(4, report.last_line_seen());
   EXPECT_EQ(report.parse_results().size(), report.last_line_seen());
-  std::vector<absl::string_view> lines = absl::StrSplit(robotstxt, '\n');
+  std::vector<std::string_view> lines = StrSplit(robotstxt, '\n');
 
   // For line "user-agent: foo\n"       // 1
   expectLineToParseTo(

@@ -1,11 +1,19 @@
 #include "reporting_robots.h"
 
 #include <algorithm>
+#include <cctype>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include "absl/strings/ascii.h"
-#include "absl/strings/string_view.h"
+namespace {
+std::string AsciiStrToLower(std::string_view s) {
+  std::string result(s);
+  std::transform(result.begin(), result.end(), result.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return result;
+}
+}  // namespace
 
 namespace googlebot {
 // The kUnsupportedTags tags are popular tags in robots.txt files, but Google
@@ -51,27 +59,27 @@ void RobotsParsingReporter::HandleRobotsStart() {
 }
 void RobotsParsingReporter::HandleRobotsEnd() {}
 void RobotsParsingReporter::HandleUserAgent(int line_num,
-                                            absl::string_view line_value) {
+                                            std::string_view line_value) {
   Digest(line_num, RobotsParsedLine::kUserAgent);
 }
 void RobotsParsingReporter::HandleAllow(int line_num,
-                                        absl::string_view line_value) {
+                                        std::string_view line_value) {
   Digest(line_num, RobotsParsedLine::kAllow);
 }
 void RobotsParsingReporter::HandleDisallow(int line_num,
-                                           absl::string_view line_value) {
+                                           std::string_view line_value) {
   Digest(line_num, RobotsParsedLine::kDisallow);
 }
 void RobotsParsingReporter::HandleSitemap(int line_num,
-                                          absl::string_view line_value) {
+                                          std::string_view line_value) {
   Digest(line_num, RobotsParsedLine::kSitemap);
 }
 void RobotsParsingReporter::HandleUnknownAction(int line_num,
-                                                absl::string_view action,
-                                                absl::string_view line_value) {
+                                                std::string_view action,
+                                                std::string_view line_value) {
   RobotsParsedLine::RobotsTagName rtn =
       std::count(kUnsupportedTags.begin(), kUnsupportedTags.end(),
-                 absl::AsciiStrToLower(action)) > 0
+                 AsciiStrToLower(action)) > 0
           ? RobotsParsedLine::kUnused
           : RobotsParsedLine::kUnknown;
   unused_directives_++;

@@ -1,10 +1,10 @@
 #ifndef THIRD_PARTY_ROBOTSTXT_REPORTING_ROBOTS_H_
 #define THIRD_PARTY_ROBOTSTXT_REPORTING_ROBOTS_H_
 
+#include <map>
+#include <string_view>
 #include <vector>
 
-#include "absl/container/btree_map.h"
-#include "absl/strings/string_view.h"
 #include "robots.h"
 
 namespace googlebot {
@@ -40,12 +40,12 @@ class RobotsParsingReporter : public googlebot::RobotsParseHandler {
  public:
   void HandleRobotsStart() override;
   void HandleRobotsEnd() override;
-  void HandleUserAgent(int line_num, absl::string_view line_value) override;
-  void HandleAllow(int line_num, absl::string_view line_value) override;
-  void HandleDisallow(int line_num, absl::string_view line_value) override;
-  void HandleSitemap(int line_num, absl::string_view line_value) override;
-  void HandleUnknownAction(int line_num, absl::string_view action,
-                           absl::string_view line_value) override;
+  void HandleUserAgent(int line_num, std::string_view line_value) override;
+  void HandleAllow(int line_num, std::string_view line_value) override;
+  void HandleDisallow(int line_num, std::string_view line_value) override;
+  void HandleSitemap(int line_num, std::string_view line_value) override;
+  void HandleUnknownAction(int line_num, std::string_view action,
+                           std::string_view line_value) override;
   void ReportLineMetadata(int line_num, const LineMetadata& metadata) override;
 
   int last_line_seen() const { return last_line_seen_; }
@@ -63,7 +63,7 @@ class RobotsParsingReporter : public googlebot::RobotsParseHandler {
   void Digest(int line_num, RobotsParsedLine::RobotsTagName parsed_tag);
 
   // Indexed and sorted by line number.
-  absl::btree_map<int, RobotsParsedLine> robots_parse_results_;
+  std::map<int, RobotsParsedLine> robots_parse_results_;
   int last_line_seen_ = 0;
   int valid_directives_ = 0;
   int unused_directives_ = 0;
