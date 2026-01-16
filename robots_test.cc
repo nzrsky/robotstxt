@@ -380,6 +380,185 @@ TEST(RobotsUnittest, ID_RequestRate) {
   }
 }
 
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+// Test Content-Signal parsing and retrieval via GetContentSignal().
+// See: https://github.com/google/robotstxt/issues/80
+TEST(RobotsUnittest, ID_ContentSignal) {
+  // Test basic content-signal parsing with all signals.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=no, search=yes, ai-input=yes\n"
+        "Disallow: /private/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    EXPECT_TRUE(matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/"));
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    ASSERT_TRUE(signal.value().ai_train.has_value());
+    EXPECT_FALSE(signal.value().ai_train.value());
+    ASSERT_TRUE(signal.value().search.has_value());
+    EXPECT_TRUE(signal.value().search.value());
+    ASSERT_TRUE(signal.value().ai_input.has_value());
+    EXPECT_TRUE(signal.value().ai_input.value());
+    // Test convenience methods.
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());
+    EXPECT_TRUE(signal.value().AllowsAiInput());
+  }
+  // Test content-signal with only ai-train signal.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=no\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    ASSERT_TRUE(signal.value().ai_train.has_value());
+    EXPECT_FALSE(signal.value().ai_train.value());
+    EXPECT_FALSE(signal.value().search.has_value());
+    EXPECT_FALSE(signal.value().ai_input.has_value());
+    // Unset signals default to true via convenience methods.
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());  // Defaults to true.
+    EXPECT_TRUE(signal.value().AllowsAiInput());  // Defaults to true.
+  }
+  // Test content-signal with "true/false" syntax.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=false, search=true\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());
+  }
+  // Test content-signal with "1/0" syntax.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=0, search=1, ai-input=1\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());
+    EXPECT_TRUE(signal.value().AllowsAiInput());
+  }
+  // Test specific user-agent content-signal takes precedence.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=yes\n"
+        "\n"
+        "User-agent: FooBot\n"
+        "Content-Signal: ai-train=no\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"FooBot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+  }
+  // Test no content-signal returns nullopt.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Disallow: /private/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    EXPECT_FALSE(signal.has_value());
+  }
+  // Test content-signal with typo variant "contentsignal".
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "contentsignal: ai-train=no\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+  }
+  // Test content-signal with extra whitespace.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal:   ai-train = no  ,  search = yes  \n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());
+  }
+  // Test content-signal case insensitivity for keys and values.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: AI-TRAIN=NO, SEARCH=YES\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());
+  }
+  // Test HasAnySignal() method.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: search=yes\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_TRUE(signal.value().HasAnySignal());
+  }
+  // Test content-signal with invalid key (should be ignored).
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=no, unknown-key=value, search=yes\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"Googlebot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+    EXPECT_TRUE(signal.value().AllowsSearch());
+  }
+  // Test global content-signal is used when no specific user-agent matches.
+  {
+    const std::string_view robotstxt =
+        "User-agent: *\n"
+        "Content-Signal: ai-train=no\n"
+        "\n"
+        "User-agent: FooBot\n"
+        "Disallow: /foo/\n";
+    googlebot::RobotsMatcher matcher;
+    std::vector<std::string> agents = {"BarBot"};
+    matcher.AllowedByRobots(robotstxt, &agents, "http://example.com/");
+    auto signal = matcher.GetContentSignal();
+    ASSERT_TRUE(signal.has_value());
+    EXPECT_FALSE(signal.value().AllowsAiTrain());
+  }
+}
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
+
 // Test based on the documentation at
 // https://developers.google.com/search/reference/robots_txt#order-of-precedence-for-user-agents
 // "Only one group is valid for a particular crawler"
@@ -1137,6 +1316,14 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
     request_rate_ = rate;
   }
 
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  void HandleContentSignal(int line_num,
+                           const googlebot::ContentSignal& signal) override {
+    Digest(line_num);
+    content_signal_ = signal;
+  }
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
+
   // Any other unrecognized name/v pairs.
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view value) override {
@@ -1163,6 +1350,13 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
     return request_rate_;
   }
 
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  // Parsed content-signal value.
+  std::optional<googlebot::ContentSignal> content_signal() const {
+    return content_signal_;
+  }
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
+
  private:
   void Digest(int line_num) {
     ASSERT_GE(line_num, last_line_seen_);
@@ -1176,6 +1370,9 @@ class RobotsStatsReporter : public googlebot::RobotsParseHandler {
   std::string sitemap_;
   std::optional<double> crawl_delay_;
   std::optional<googlebot::RequestRate> request_rate_;
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  std::optional<googlebot::ContentSignal> content_signal_;
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 };
 
 // Different kinds of line endings are all supported: %x0D / %x0A / %x0D.0A

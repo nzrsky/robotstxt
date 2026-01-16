@@ -126,6 +126,9 @@ class NoOpHandler : public googlebot::RobotsParseHandler {
   void HandleSitemap(int, std::string_view) override {}
   void HandleCrawlDelay(int, double) override {}
   void HandleRequestRate(int, const googlebot::RequestRate&) override {}
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  void HandleContentSignal(int, const googlebot::ContentSignal&) override {}
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
   void HandleUnknownAction(int, std::string_view, std::string_view) override {}
 };
 

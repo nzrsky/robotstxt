@@ -24,13 +24,17 @@ namespace googlebot {
 // have some use cases; to the best of our knowledge other tags we find, don't.
 // (for example, "unicorn" from "unicorn: /value")
 // Note: "crawl-delay" and "request-rate" are now supported tags.
+// "content-signal" is supported when ROBOTS_SUPPORT_CONTENT_SIGNAL is enabled.
 static const std::vector<std::string> kUnsupportedTags = {
     // Yandex/Bing extensions
     "clean-param", "host",
     // Meta-like directives (some sites use these in robots.txt)
     "noindex", "noarchive", "nofollow",
     // AI/LLM related directives
-    "content-signal", "llm-policy", "llm", "llm-content", "llm-full-content", "llm-full",
+#if !ROBOTS_SUPPORT_CONTENT_SIGNAL
+    "content-signal",
+#endif  // !ROBOTS_SUPPORT_CONTENT_SIGNAL
+    "llm-policy", "llm", "llm-content", "llm-full-content", "llm-full",
     // Other
     "license"};
 
@@ -89,6 +93,12 @@ void RobotsParsingReporter::HandleRequestRate(int line_num,
                                               const RequestRate& rate) {
   Digest(line_num, RobotsParsedLine::kRequestRate);
 }
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+void RobotsParsingReporter::HandleContentSignal(int line_num,
+                                                const ContentSignal& signal) {
+  Digest(line_num, RobotsParsedLine::kContentSignal);
+}
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 void RobotsParsingReporter::HandleUnknownAction(int line_num,
                                                 std::string_view action,
                                                 std::string_view line_value) {

@@ -39,6 +39,13 @@
 #include <string_view>
 #include <vector>
 
+// Content-Signal directive support (proposed for AI content preferences).
+// Define ROBOTS_SUPPORT_CONTENT_SIGNAL=0 to disable for smaller binary/faster parsing.
+// Default: enabled (1)
+#ifndef ROBOTS_SUPPORT_CONTENT_SIGNAL
+#define ROBOTS_SUPPORT_CONTENT_SIGNAL 1
+#endif
+
 namespace googlebot {
 
 // Request-rate directive value: requests per time period.
@@ -57,6 +64,37 @@ struct RequestRate {
     return requests > 0 ? static_cast<double>(seconds) / requests : 0.0;
   }
 };
+
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+// Content-Signal directive value: AI content preferences.
+// Format in robots.txt: "Content-Signal: ai-train=no, search=yes, ai-input=yes"
+// See: https://github.com/nicksellen/cc-signals
+struct ContentSignal {
+  std::optional<bool> ai_train;   // ai-train: Training or fine-tuning AI models
+  std::optional<bool> ai_input;   // ai-input: Using content in AI models for real-time generation
+  std::optional<bool> search;     // search: Building search indexes and providing results
+
+  // Returns true if any signal is set.
+  bool HasAnySignal() const {
+    return ai_train.has_value() || ai_input.has_value() || search.has_value();
+  }
+
+  // Returns true if AI training is allowed (defaults to true if not specified).
+  bool AllowsAiTrain() const {
+    return ai_train.value_or(true);
+  }
+
+  // Returns true if AI input is allowed (defaults to true if not specified).
+  bool AllowsAiInput() const {
+    return ai_input.value_or(true);
+  }
+
+  // Returns true if search indexing is allowed (defaults to true if not specified).
+  bool AllowsSearch() const {
+    return search.value_or(true);
+  }
+};
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 // Handler for directives found in robots.txt. These callbacks are called by
 // ParseRobotsTxt() in the sequence they have been found in the file.
 class RobotsParseHandler {
@@ -84,6 +122,13 @@ class RobotsParseHandler {
   // Request-rate directive (non-standard, used by Bing and others).
   // Format: "requests/seconds" (e.g., "1/5" = 1 request per 5 seconds).
   virtual void HandleRequestRate(int line_num, const RequestRate& rate) = 0;
+
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  // Content-Signal directive (proposed for AI content preferences).
+  // Format: "ai-train=no, search=yes, ai-input=yes"
+  // See: https://github.com/nicksellen/cc-signals
+  virtual void HandleContentSignal(int line_num, const ContentSignal& signal) = 0;
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 
   // Any other unrecognized name/value pairs.
   virtual void HandleUnknownAction(int line_num, std::string_view action,
@@ -198,6 +243,13 @@ class RobotsMatcher : protected RobotsParseHandler {
   // Note: This is a non-standard directive that Google ignores.
   std::optional<RequestRate> GetRequestRate() const;
 
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  // Returns the content-signal for the matched user-agent.
+  // Returns std::nullopt if no content-signal was specified.
+  // Note: This is a proposed directive for AI content preferences.
+  std::optional<ContentSignal> GetContentSignal() const;
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
+
  protected:
   // Parse callbacks.
   // Protected because used in unittest. Never override RobotsMatcher, implement
@@ -212,6 +264,9 @@ class RobotsMatcher : protected RobotsParseHandler {
   void HandleSitemap(int line_num, std::string_view value) override;
   void HandleCrawlDelay(int line_num, double value) override;
   void HandleRequestRate(int line_num, const RequestRate& rate) override;
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  void HandleContentSignal(int line_num, const ContentSignal& signal) override;
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
   void HandleUnknownAction(int line_num, std::string_view action,
                            std::string_view value) override;
 
@@ -310,6 +365,12 @@ class RobotsMatcher : protected RobotsParseHandler {
   // Request-rate values for global (*) and specific user-agent groups.
   std::optional<RequestRate> request_rate_global_;
   std::optional<RequestRate> request_rate_specific_;
+
+#if ROBOTS_SUPPORT_CONTENT_SIGNAL
+  // Content-signal values for global (*) and specific user-agent groups.
+  std::optional<ContentSignal> content_signal_global_;
+  std::optional<ContentSignal> content_signal_specific_;
+#endif  // ROBOTS_SUPPORT_CONTENT_SIGNAL
 };
 
 }  // namespace googlebot
