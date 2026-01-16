@@ -8,14 +8,31 @@
 **C++ Standard:** C++20
 **Dataset:** 6863 robots.txt files (~9 MB total)
 
-## Current Configuration: C++20 + ada-url + std::string_view
+## Current Configuration: C++20 + ada-url + Zero-Copy Parsing
 
 | Benchmark                  | Time      | Throughput              |
 |----------------------------|-----------|-------------------------|
-| Parse + Match All Files    | 27.2 ms   | 332 MB/s, 252k files/s  |
-| Parse + Match Single File  | 216 ns    | 150 MB/s                |
-| Match (3 User-Agents)      | 209 ns    | -                       |
-| Parse Only (All Files)     | 23.2 ms   | 296k files/s            |
+| Parse + Match All Files    | 20.1 ms   | 450 MB/s, 341k files/s  |
+| Parse Only (All Files)     | 15.6 ms   | 441k files/s            |
+
+## Zero-Copy Parsing Optimization
+
+Eliminated 16KB heap allocation per `Parse()` call by using `string_view` to reference line content directly from the input buffer instead of copying each character.
+
+**Improvement vs previous version:**
+
+| Benchmark                  | Before    | After     | Improvement |
+|----------------------------|-----------|-----------|-------------|
+| Parse + Match All Files    | 26.1 ms   | 20.1 ms   | **23% faster** |
+| Parse Only (All Files)     | 21.7 ms   | 15.6 ms   | **28% faster** |
+| Throughput                 | 347 MB/s  | 450 MB/s  | **+30%** |
+| Files/sec                  | 316k      | 441k      | **+40%** |
+
+**Changes:**
+- `GetKeyAndValueFrom` now works with `string_view` instead of `char*`
+- `ParseAndEmitLine` accepts `string_view` instead of mutable buffer
+- `Parse()` tracks line boundaries via indices, no buffer allocation
+- Added `MaybeEscapePattern` overload for `string_view` input
 
 ## C++20 Features Used
 
@@ -23,32 +40,28 @@
 - `std::string_view::starts_with()` (replaces custom function)
 - `[[likely]]` / `[[unlikely]]` branch hints in hot paths
 - `constexpr` for static constants
+- `std::optional` for zero-copy escape pattern results
 
 ## Comparison vs Previous Configurations
 
-| Benchmark                  | C++20 + ada | C++17 + ada  | C++17 only   | abseil       |
-|----------------------------|-------------|--------------|--------------|--------------|
-| Parse + Match All Files    | 27.2 ms     | 26.4 ms      | 30.1 ms      | 32.5 ms      |
-| Parse + Match Single File  | 216 ns      | 211 ns       | 212 ns       | 218 ns       |
-| Match (3 User-Agents)      | 209 ns      | 211 ns       | 197 ns       | 204 ns       |
-| Parse Only (All Files)     | 23.2 ms     | 22.5 ms      | 25.0 ms      | 29.7 ms      |
+| Benchmark                  | Zero-copy | C++20 + ada | C++17 + ada  | C++17 only   | abseil       |
+|----------------------------|-----------|-------------|--------------|--------------|--------------|
+| Parse + Match All Files    | 20.1 ms   | 26.1 ms     | 26.4 ms      | 30.1 ms      | 32.5 ms      |
+| Parse Only (All Files)     | 15.6 ms   | 21.7 ms     | 22.5 ms      | 25.0 ms      | 29.7 ms      |
 
 **Notes:**
+- Zero-copy optimization provides significant improvement in parsing performance
 - C++20 + ada results use Apple Clang, previous results used LLVM Clang
-- Performance is comparable; differences are within measurement variance
-- C++20 provides better code safety and clarity without performance regression
 
 ## Raw Output
 
 ```
 Loaded 6863 robots.txt files
--------------------------------------------------------------------------------------
-Benchmark                           Time             CPU   Iterations UserCounters...
--------------------------------------------------------------------------------------
-BM_ParseAllRobotsTxt         27234500 ns     27232000 ns           26 bytes_per_second=332.342Mi/s items_per_second=252.02k/s
-BM_ParseSingleRobotsTxt           216 ns          216 ns      3323805 bytes_per_second=150.386Mi/s
-BM_MatchMultipleUserAgents        209 ns          209 ns      3356654
-BM_ParseOnly                 23159379 ns     23158433 ns           30 items_per_second=296.35k/s
+-------------------------------------------------------------------------------
+Benchmark                     Time             CPU   Iterations UserCounters...
+-------------------------------------------------------------------------------
+BM_ParseAllRobotsTxt   20125088 ns     20123944 ns           36 bytes_per_second=449.73Mi/s items_per_second=341.037k/s
+BM_ParseOnly           15581618 ns     15578956 ns           45 items_per_second=440.53k/s
 ```
 
 ## How to Run
