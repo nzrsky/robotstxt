@@ -203,4 +203,28 @@ ROBOTS_API const char* robots_version(void);
 }
 #endif
 
+// =============================================================================
+// Convenience macros for null-terminated strings
+// =============================================================================
+
+#include <string.h>
+
+// Check if URL is allowed (null-terminated strings)
+#define robots_allowed(matcher, robots_txt, user_agent, url) \
+    robots_allowed_by_robots(matcher, \
+        robots_txt, strlen(robots_txt), \
+        user_agent, strlen(user_agent), \
+        url, strlen(url))
+
+// Check if URL is allowed for multiple user-agents (null-terminated strings)
+#define robots_allowed_multi(matcher, robots_txt, user_agents, num_agents, url) \
+    robots_allowed_by_robots_multi(matcher, \
+        robots_txt, strlen(robots_txt), \
+        user_agents, NULL, num_agents, \
+        url, strlen(url))
+
+// Validate user-agent (null-terminated string)
+#define robots_valid_user_agent(user_agent) \
+    robots_is_valid_user_agent(user_agent, strlen(user_agent))
+
 #endif  // ROBOTS_C_H
