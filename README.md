@@ -36,6 +36,14 @@ This fork includes several improvements over the original Google implementation:
 - **Issue [#57](https://github.com/google/robotstxt/issues/57)**: Percent-encoded special characters (`%2A` for `*`, `%24` for `$`) in robots.txt rules now correctly match their literal equivalents in URLs
 - **Issue [#64](https://github.com/google/robotstxt/issues/64)**: Percent-encoded characters in query strings (e.g., `http%3A%2F%2F`) now match their decoded equivalents (`http://`) per RFC 9309 section 2.2.2
 
+### Other Fixes
+- **Issue [#51](https://github.com/google/robotstxt/issues/51)**: Combination of Crawl-delay and badbot Disallow results in blocking of Googlebot
+
+### New Features
+- **Extended Directives**: Support for `Crawl-delay`, `Request-rate`, and `Content-Signal` (AI training/indexing preferences) (**Issue [#80](https://github.com/google/robotstxt/issues/80)**)
+- **C API**: Full-featured C bindings for easy integration with any language via FFI
+- **Language Bindings**: Official bindings for Python, Go, Rust, Ruby, Java, and Swift
+
 ## Benchmark
 
 Performance comparison on 6,863 real robots.txt files (~9 MB):
@@ -44,9 +52,9 @@ Performance comparison on 6,863 real robots.txt files (~9 MB):
 |:---|---:|---:|
 | **C++ (this repo)** | 20.1 ms | 1.00 |
 | C++ (Google original) | 26.1 ms | 1.30× slower |
-| [Rust](https://github.com/Folyd/robotstxt) | 82.8 ms | 4.1× slower |
-| [Go](https://github.com/jimsmart/grobotstxt) | 93.2 ms | 4.6× slower |
-| [Python](https://github.com/Cocon-Se/gpyrobotstxt) | 1.35 s | 67× slower |
+| [folyd's Rust port](https://github.com/Folyd/robotstxt) | 82.8 ms | 4.1× slower |
+| [jimsmart's Go port](https://github.com/jimsmart/grobotstxt) | 93.2 ms | 4.6× slower |
+| [cocon-se's Python port](https://github.com/Cocon-Se/gpyrobotstxt) | 1.35 s | 67× slower |
 
 This fork is **~30% faster** than the original Google implementation thanks to zero-copy parsing optimization.
 
@@ -140,6 +148,206 @@ $ robots ~/local/path/to/robots.txt YourBot https://example.com/url
 > ```
 
 > **Exit codes:** `0` = ALLOWED, `1` = DISALLOWED
+
+## Language Bindings
+
+This library provides official bindings for multiple programming languages. All bindings expose the same core functionality with idiomatic APIs.
+
+### C
+
+```c
+#include "robots_c.h"
+
+robots_matcher_t* matcher = robots_matcher_create();
+
+const char* robots_txt = "User-agent: *\nDisallow: /admin/\n";
+const char* user_agent = "Googlebot";
+const char* url = "https://example.com/admin/secret";
+
+bool allowed = robots_allowed_by_robots(
+    matcher, robots_txt, strlen(robots_txt),
+    user_agent, strlen(user_agent),
+    url, strlen(url));
+
+printf("Access: %s\n", allowed ? "allowed" : "disallowed");
+
+// Check crawl-delay
+if (robots_has_crawl_delay(matcher)) {
+    printf("Crawl-delay: %.1f seconds\n", robots_get_crawl_delay(matcher));
+}
+
+robots_matcher_free(matcher);
+```
+
+### Python
+
+```bash
+pip install robotstxt  # or use from source
+```
+
+```python
+from robotstxt import RobotsMatcher
+
+matcher = RobotsMatcher()
+robots_txt = """
+User-agent: *
+Disallow: /admin/
+Crawl-delay: 1.5
+"""
+
+allowed = matcher.is_allowed(robots_txt, "Googlebot", "https://example.com/page")
+print(f"Access: {'allowed' if allowed else 'disallowed'}")
+
+# Extended directives
+if matcher.crawl_delay is not None:
+    print(f"Crawl-delay: {matcher.crawl_delay} seconds")
+
+if matcher.allows_ai_train():
+    print("AI training: allowed")
+```
+
+### Go
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/nzrsky/robotstxt/bindings/go"
+)
+
+func main() {
+    matcher := robotstxt.NewMatcher()
+    defer matcher.Free()
+
+    robotsTxt := `
+User-agent: *
+Disallow: /admin/
+Crawl-delay: 2.0
+`
+    allowed := matcher.IsAllowed(robotsTxt, "Googlebot", "https://example.com/page")
+    fmt.Printf("Access: %v\n", allowed)
+
+    // Extended directives
+    if delay, ok := matcher.CrawlDelay(); ok {
+        fmt.Printf("Crawl-delay: %.1f seconds\n", delay)
+    }
+}
+```
+
+### Rust
+
+```toml
+# Cargo.toml
+[dependencies]
+robotstxt = { path = "bindings/rust" }
+```
+
+```rust
+use robotstxt::RobotsMatcher;
+
+fn main() {
+    let matcher = RobotsMatcher::new();
+    let robots_txt = "User-agent: *\nDisallow: /admin/\n";
+
+    let allowed = matcher.is_allowed(robots_txt, "Googlebot", "https://example.com/page");
+    println!("Access: {}", if allowed { "allowed" } else { "disallowed" });
+
+    // Extended directives
+    if let Some(delay) = matcher.crawl_delay() {
+        println!("Crawl-delay: {} seconds", delay);
+    }
+
+    if matcher.allows_ai_train() {
+        println!("AI training: allowed");
+    }
+}
+```
+
+### Ruby
+
+```ruby
+require 'robotstxt'
+
+matcher = RobotsTxt::Matcher.new
+robots_txt = <<~ROBOTS
+  User-agent: *
+  Disallow: /admin/
+  Crawl-delay: 1.0
+ROBOTS
+
+allowed = matcher.allowed?(robots_txt, "Googlebot", "https://example.com/page")
+puts "Access: #{allowed ? 'allowed' : 'disallowed'}"
+
+# Extended directives
+if matcher.crawl_delay
+  puts "Crawl-delay: #{matcher.crawl_delay} seconds"
+end
+
+puts "AI training: #{matcher.allows_ai_train? ? 'allowed' : 'disallowed'}"
+```
+
+### Java
+
+```java
+import com.google.robotstxt.RobotsMatcher;
+
+public class Example {
+    public static void main(String[] args) {
+        try (RobotsMatcher matcher = new RobotsMatcher()) {
+            String robotsTxt = "User-agent: *\nDisallow: /admin/\n";
+            boolean allowed = matcher.isAllowed(robotsTxt, "Googlebot", "https://example.com/page");
+            System.out.println("Access: " + (allowed ? "allowed" : "disallowed"));
+
+            // Extended directives
+            Double crawlDelay = matcher.getCrawlDelay();
+            if (crawlDelay != null) {
+                System.out.println("Crawl-delay: " + crawlDelay + " seconds");
+            }
+
+            System.out.println("AI training: " + (matcher.allowsAITrain() ? "allowed" : "disallowed"));
+        }
+    }
+}
+```
+
+### Swift
+
+```swift
+import RobotsTxt
+
+let matcher = RobotsMatcher()
+let robotsTxt = """
+User-agent: *
+Disallow: /admin/
+"""
+
+let allowed = matcher.isAllowed(robotsTxt: robotsTxt, userAgent: "Googlebot", url: "https://example.com/page")
+print("Access: \(allowed ? "allowed" : "disallowed")")
+
+// Extended directives
+if let delay = matcher.crawlDelay {
+    print("Crawl-delay: \(delay) seconds")
+}
+
+if matcher.allowsAITrain {
+    print("AI training: allowed")
+}
+```
+
+### Building Bindings
+
+All bindings require the C++ library to be built first:
+
+```bash
+cmake -B _build -DCMAKE_BUILD_TYPE=Release
+cmake --build _build
+```
+
+Then set the library path:
+- **Linux**: `export LD_LIBRARY_PATH=$PWD/_build`
+- **macOS**: `export DYLD_LIBRARY_PATH=$PWD/_build`
+- **Windows**: Add `_build` directory to `PATH`
 
 ## Notes
 
