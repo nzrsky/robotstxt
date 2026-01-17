@@ -164,10 +164,7 @@ const char* robots_txt = "User-agent: *\nDisallow: /admin/\n";
 const char* user_agent = "Googlebot";
 const char* url = "https://example.com/admin/secret";
 
-bool allowed = robots_allowed_by_robots(
-    matcher, robots_txt, strlen(robots_txt),
-    user_agent, strlen(user_agent),
-    url, strlen(url));
+bool allowed = robots_allowed(matcher, robots_txt, user_agent, url);
 
 printf("Access: %s\n", allowed ? "allowed" : "disallowed");
 
