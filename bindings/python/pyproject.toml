@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "fast-robotstxt"
-version = "1.0.0"
+version = "1.1.0"
 description = "Python bindings for Google's robots.txt parser library"
 readme = "README.md"
 license = {text = "Apache-2.0"}

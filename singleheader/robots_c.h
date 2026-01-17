@@ -1810,7 +1810,7 @@ bool ParsedRobotsKey::KeyIsContentSignal(std::string_view key,
 #include <string_view>
 #include <vector>
 
-#define ROBOTS_VERSION "1.0.0"
+#define ROBOTS_VERSION "1.1.0"
 
 // =============================================================================
 // Internal wrapper struct
