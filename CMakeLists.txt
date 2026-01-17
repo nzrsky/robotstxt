@@ -89,13 +89,13 @@ ENDIF(CPU_ARCH)
 
 ########### project files ###############
 
-INCLUDE_DIRECTORIES(.)
+INCLUDE_DIRECTORIES(. ./bindings/c)
 
 ######### targets ###########
 
 SET(LIBROBOTS_LIBS)
 
-SET(robots_SRCS ./robots.cc)
+SET(robots_SRCS ./robots.cc ./bindings/c/robots_c.cc)
 
 ADD_LIBRARY(robots SHARED ${robots_SRCS})
 TARGET_LINK_LIBRARIES(robots ada)
@@ -124,9 +124,11 @@ IF(ROBOTS_BUILD_STATIC)
     SET_TARGET_PROPERTIES(${LIBROBOTS_LIBS} PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 ENDIF(ROBOTS_BUILD_STATIC)
 
-IF(WIN_32)
-    SET_TARGET_PROPERTIES(robots PROPERTIES DEFINE_SYMBOL DLL_EXPORT)
-ENDIF(WIN_32)
+IF(WIN32)
+    SET_TARGET_PROPERTIES(robots PROPERTIES
+        DEFINE_SYMBOL DLL_EXPORT
+        WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ENDIF(WIN32)
 
 ADD_EXECUTABLE(robots-main ./robots_main.cc)
 TARGET_LINK_LIBRARIES(robots-main ${LIBROBOTS_LIBS})
@@ -140,7 +142,10 @@ IF(ROBOTS_INSTALL)
         ARCHIVE DESTINATION lib
     )
 
-    INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/robots.h DESTINATION include)
+    INSTALL(FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/robots.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/bindings/c/robots_c.h
+        DESTINATION include)
 
     INSTALL(TARGETS robots-main DESTINATION bin)
 ENDIF(ROBOTS_INSTALL)
@@ -159,10 +164,15 @@ IF(ROBOTS_BUILD_TESTS)
     SET(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 
-    ADD_EXECUTABLE(robots-test ./robots_test.cc)
+    ADD_EXECUTABLE(robots-test ./tests/robots_test.cc)
     TARGET_LINK_LIBRARIES(robots-test ${LIBROBOTS_LIBS} gtest_main)
     TARGET_COMPILE_DEFINITIONS(robots-test PRIVATE ROBOTS_USE_ADA)
     ADD_TEST(NAME robots-test COMMAND robots-test)
+
+    ADD_EXECUTABLE(reporting-robots-test ./tests/reporting_robots_test.cc ./reporting_robots.cc)
+    TARGET_LINK_LIBRARIES(reporting-robots-test ${LIBROBOTS_LIBS} gtest_main)
+    TARGET_COMPILE_DEFINITIONS(reporting-robots-test PRIVATE ROBOTS_USE_ADA)
+    ADD_TEST(NAME reporting-robots-test COMMAND reporting-robots-test)
 ENDIF(ROBOTS_BUILD_TESTS)
 
 ############ benchmark ##############
@@ -178,6 +188,6 @@ IF(ROBOTS_BUILD_BENCHMARK)
     SET(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googlebenchmark)
 
-    ADD_EXECUTABLE(robots-benchmark ./robots_benchmark.cc)
+    ADD_EXECUTABLE(robots-benchmark ./tests/robots_benchmark.cc)
     TARGET_LINK_LIBRARIES(robots-benchmark ${LIBROBOTS_LIBS} benchmark::benchmark)
 ENDIF(ROBOTS_BUILD_BENCHMARK)
