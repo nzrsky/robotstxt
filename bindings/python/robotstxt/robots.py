@@ -20,30 +20,33 @@ def _find_library() -> str:
     else:
         lib_names = ["librobots.so", "librobots.so.1"]
 
-    # Search paths
+    # Search paths (order matters - bundled library first)
     search_paths = [
-        # Relative to this file
+        # Bundled in wheel (same directory as this module)
         Path(__file__).parent,
+        # Development: relative paths from bindings/python/robotstxt
         Path(__file__).parent.parent,
         Path(__file__).parent.parent.parent,
-        # Build directories
         Path(__file__).parent.parent.parent.parent / "_build",
         Path(__file__).parent.parent.parent.parent / "cmake-build",
         Path(__file__).parent.parent.parent.parent / "build",
-        # System paths
-        Path("/usr/local/lib"),
-        Path("/usr/lib"),
     ]
 
-    # Add ROBOTS_LIB_PATH (cross-platform), LD_LIBRARY_PATH, DYLD_LIBRARY_PATH
+    # Add ROBOTS_LIB_PATH environment variable
     robots_lib_path = os.environ.get("ROBOTS_LIB_PATH", "")
     if robots_lib_path:
-        search_paths.append(Path(robots_lib_path))
+        search_paths.insert(0, Path(robots_lib_path))
+
+    # Add LD_LIBRARY_PATH / DYLD_LIBRARY_PATH
     ld_path = os.environ.get("LD_LIBRARY_PATH", "") or os.environ.get("DYLD_LIBRARY_PATH", "")
     path_sep = ";" if sys.platform == "win32" else ":"
     for p in ld_path.split(path_sep):
         if p:
             search_paths.append(Path(p))
+
+    # System paths (last resort)
+    if sys.platform != "win32":
+        search_paths.extend([Path("/usr/local/lib"), Path("/usr/lib")])
 
     for search_path in search_paths:
         for lib_name in lib_names:
@@ -61,7 +64,7 @@ def _find_library() -> str:
 
     raise OSError(
         f"Could not find robots library. Searched: {lib_names}. "
-        "Make sure to build the library first with: cmake -B build && cmake --build build"
+        "Install via 'pip install robotstxt' or build from source."
     )
 
 

@@ -1,25 +1,28 @@
-# Python Bindings for robotstxt
+# robotstxt
 
-Python bindings for Google's robots.txt parser library using ctypes.
-
-## Prerequisites
-
-Build the shared library first:
-
-```bash
-# From repository root
-cmake -B build
-cmake --build build
-```
+Python bindings for Google's robots.txt parser library - high-performance, RFC 9309 compliant.
 
 ## Installation
 
 ```bash
-cd bindings/python
-pip install .
+pip install fast-robotstxt
+```
 
-# Or for development
-pip install -e .
+Pre-built wheels are available for:
+- **Linux**: x86_64, aarch64
+- **macOS**: x86_64, arm64 (Apple Silicon)
+- **Windows**: AMD64
+
+Python 3.8 - 3.13 supported.
+
+### Build from source
+
+If you need to build from source:
+
+```bash
+git clone https://github.com/nzrsky/robotstxt.git
+cd robotstxt/bindings/python
+pip install .
 ```
 
 ## Usage

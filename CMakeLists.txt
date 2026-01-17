@@ -51,8 +51,10 @@ SET(CPACK_SOURCE_IGNORE_FILES
 
 OPTION(ROBOTS_BUILD_STATIC "If ON, robots will build also the static library" ON)
 OPTION(ROBOTS_BUILD_TESTS "If ON, robots will build test targets" OFF)
+OPTION(ROBOTS_BUILD_MAIN "If ON, build the main executable" ON)
 OPTION(ROBOTS_INSTALL "If ON, enable the installation of the targets" ON)
 OPTION(ROBOTS_SUPPORT_CONTENT_SIGNAL "If ON, enable Content-Signal directive support" ON)
+OPTION(ROBOTS_PYTHON_BINDINGS "If ON, install library for Python bindings" OFF)
 
 ############ helper libs ############
 
@@ -130,24 +132,36 @@ IF(WIN32)
         WINDOWS_EXPORT_ALL_SYMBOLS ON)
 ENDIF(WIN32)
 
-ADD_EXECUTABLE(robots-main ./robots_main.cc)
-TARGET_LINK_LIBRARIES(robots-main ${LIBROBOTS_LIBS})
-SET_TARGET_PROPERTIES(robots-main PROPERTIES OUTPUT_NAME "robots")
+IF(ROBOTS_BUILD_MAIN)
+    ADD_EXECUTABLE(robots-main ./robots_main.cc)
+    TARGET_LINK_LIBRARIES(robots-main ${LIBROBOTS_LIBS})
+    SET_TARGET_PROPERTIES(robots-main PROPERTIES OUTPUT_NAME "robots")
+ENDIF(ROBOTS_BUILD_MAIN)
 
 ############ installation ############
 
 IF(ROBOTS_INSTALL)
-    INSTALL(TARGETS ${LIBROBOTS_LIBS}
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-    )
+    IF(ROBOTS_PYTHON_BINDINGS)
+        # Install shared library directly to Python package directory
+        INSTALL(TARGETS robots
+            LIBRARY DESTINATION .
+            RUNTIME DESTINATION .
+        )
+    ELSE()
+        INSTALL(TARGETS ${LIBROBOTS_LIBS}
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib
+        )
 
-    INSTALL(FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/robots.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/bindings/c/robots_c.h
-        DESTINATION include)
+        INSTALL(FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/robots.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/bindings/c/robots_c.h
+            DESTINATION include)
 
-    INSTALL(TARGETS robots-main DESTINATION bin)
+        IF(ROBOTS_BUILD_MAIN)
+            INSTALL(TARGETS robots-main DESTINATION bin)
+        ENDIF(ROBOTS_BUILD_MAIN)
+    ENDIF(ROBOTS_PYTHON_BINDINGS)
 ENDIF(ROBOTS_INSTALL)
 
 ############ tests ##############
