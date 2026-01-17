@@ -25,7 +25,7 @@ make
 
 ```bash
 gem build robotstxt.gemspec
-gem install robotstxt-1.0.0.gem
+gem install robotstxt-1.1.0.gem
 ```
 
 ### In Bundler

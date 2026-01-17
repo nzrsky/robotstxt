@@ -18,4 +18,4 @@ Example usage:
 from .robots import RobotsMatcher, is_valid_user_agent, get_version
 
 __all__ = ["RobotsMatcher", "is_valid_user_agent", "get_version"]
-__version__ = "1.0.0"
+__version__ = "1.1.0"
