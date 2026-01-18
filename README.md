@@ -90,7 +90,7 @@ and compilers.
 To build and run the binary:
 
 ```bash
-$ git clone https://github.com/google/robotstxt.git robotstxt
+$ git clone https://github.com/nzrsky/robotstxt.git robotstxt
 Cloning into 'robotstxt'...
 ...
 $ cd robotstxt/
@@ -117,7 +117,7 @@ library.
 To build the library using CMake, just follow the steps below:
 
 ```bash
-$ git clone https://github.com/google/robotstxt.git robotstxt
+$ git clone https://github.com/nzrsky/robotstxt.git robotstxt
 Cloning into 'robotstxt'...
 ...
 $ cd robotstxt/

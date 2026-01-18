@@ -28,7 +28,7 @@ export LD_LIBRARY_PATH="/path/to/robotstxt/build:$LD_LIBRARY_PATH"
 # or on macOS:
 export DYLD_LIBRARY_PATH="/path/to/robotstxt/build:$DYLD_LIBRARY_PATH"
 
-go get github.com/google/robotstxt/bindings/go
+go get github.com/nzrsky/robotstxt/bindings/go
 ```
 
 ## Usage
@@ -38,7 +38,7 @@ package main
 
 import (
     "fmt"
-    robotstxt "github.com/google/robotstxt/bindings/go"
+    robotstxt "github.com/nzrsky/robotstxt/bindings/go"
 )
 
 func main() {
