@@ -11,7 +11,7 @@ package robotstxt
 
 /*
 #cgo CXXFLAGS: -std=c++17
-#cgo LDFLAGS: -lstdc++
+#cgo linux LDFLAGS: -lstdc++
 
 #include "robots_c.h"
 #include <stdlib.h>
