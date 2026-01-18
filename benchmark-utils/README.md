@@ -2,9 +2,22 @@
 
 Wrapper programs for benchmarking robots.txt parser implementations.
 
-## File Format
+## Benchmark Data
 
-All benchmarks read `robots_all.bin` which contains robots.txt files in a simple binary format:
+Download the benchmark data (~6800 real-world robots.txt files):
+
+```bash
+./benchmark-utils/download-data.sh
+```
+
+Or manually:
+```bash
+curl -L https://github.com/nzrsky/robotstxt-benchmark-data/raw/main/robots_all.bin.gz | gunzip > robots_files/robots_all.bin
+```
+
+### File Format
+
+The binary file contains length-prefixed records:
 ```
 [uint32_le length][content bytes] repeated
 ```
