@@ -10,9 +10,8 @@
 package robotstxt
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../c
-#cgo LDFLAGS: -L${SRCDIR}/../../build -L${SRCDIR}/../../cmake-build -lrobots -lstdc++
-#cgo darwin LDFLAGS: -Wl,-rpath,${SRCDIR}/../../build -Wl,-rpath,${SRCDIR}/../../cmake-build
+#cgo CXXFLAGS: -std=c++17
+#cgo LDFLAGS: -lstdc++
 
 #include "robots_c.h"
 #include <stdlib.h>
