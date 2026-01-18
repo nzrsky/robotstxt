@@ -67,7 +67,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Download library artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: librobots-${{ matrix.os }}-Release
           path: _build
@@ -109,7 +109,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Download library artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: librobots-${{ matrix.os }}-Release
           path: _build
@@ -151,7 +151,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
 
       - name: Download library artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: librobots-${{ matrix.os }}-Release
           path: _build
@@ -201,7 +201,7 @@ jobs:
           ruby-version: ${{ matrix.ruby-version }}
 
       - name: Download library artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: librobots-${{ matrix.os }}-Release
           path: _build
@@ -249,7 +249,7 @@ jobs:
           sudo apt-get install -y cmake build-essential
 
       - name: Download library artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: librobots-${{ matrix.os }}-Release
           path: _build
