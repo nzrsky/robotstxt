@@ -1,3 +1,3 @@
-module github.com/google/robotstxt/bindings/go
+module github.com/nzrsky/robotstxt/bindings/go
 
 go 1.18

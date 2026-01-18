@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.description   = 'A Ruby wrapper around Google\'s robots.txt parser library, ' \
                        'providing RFC 9309 compliant robots.txt parsing with support for ' \
                        'crawl-delay, request-rate, and content-signal directives.'
-  spec.homepage      = 'https://github.com/google/robotstxt'
+  spec.homepage      = 'https://github.com/nzrsky/robotstxt'
   spec.license       = 'Apache-2.0'
 
   spec.required_ruby_version = '>= 2.7.0'
