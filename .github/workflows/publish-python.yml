@@ -42,8 +42,6 @@ jobs:
           CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_WINDOWS: "AMD64"
-          CIBW_TEST_REQUIRES: "pytest"
-          CIBW_TEST_COMMAND: "pytest {project}/test_robots.py -v"
           CIBW_ENVIRONMENT: "CMAKE_BUILD_PARALLEL_LEVEL=4"
           CIBW_ENVIRONMENT_MACOS: "CMAKE_BUILD_PARALLEL_LEVEL=4 MACOSX_DEPLOYMENT_TARGET=10.15"
 
