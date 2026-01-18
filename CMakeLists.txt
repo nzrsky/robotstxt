@@ -67,7 +67,7 @@ INCLUDE(FetchContent)
 FetchContent_Declare(
     ada
     GIT_REPOSITORY https://github.com/ada-url/ada.git
-    GIT_TAG main
+    GIT_TAG v3.4.1
 )
 SET(ADA_TESTING OFF CACHE BOOL "" FORCE)
 SET(ADA_TOOLS OFF CACHE BOOL "" FORCE)
